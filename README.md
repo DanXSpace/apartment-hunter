@@ -4,7 +4,8 @@ Automated apartment listing monitor that scrapes [apartments.com](https://www.ap
 
 ## Demo
 
-![Discord notification preview](docs/preview.png)
+![Discord notification preview]<img width="268" height="200" alt="Screenshot_20260326_003055" src="https://github.com/user-attachments/assets/f0672ffb-84db-42fc-97eb-5092fdf09e99" />
+
 
 ## Architecture
 
