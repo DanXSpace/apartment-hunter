@@ -1,0 +1,15 @@
+[project]
+name = "apartment-hunter"
+version = "0.1.0"
+description = "Automated apartment listing monitor with Kafka streaming and Discord alerts"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "confluent-kafka",
+    "scrapling[fetchers]",
+    "python-dotenv",
+    "requests",
+    "schedule",
+    "curl-cffi>=0.14.0",
+    "playwright>=1.58.0",
+]
