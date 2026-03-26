@@ -17,18 +17,6 @@ uv run python main.py "https://www.apartments.com/..."
   - apartments.com uses path-based pagination: `.../2/`, `.../3/`
   - Loop until a page returns no cards
 
-- [ ] **Deduplication** — same listing re-alerts every 15 min scrape
-  - Track seen `listing_id`s in a set
-  - Persist to a file so it survives restarts
-
-- [ ] **CLI entry point** — user passes the URL as an argument
-  - Move URL out of `scraper_producer.py` and into `main.py`
-  - Accept URL via `sys.argv` or `argparse`
-  - `main.py` spins up both the producer and consumer
-
-- [ ] **Remove `is_match()` filter** — URL already encodes all criteria
-  - Consumer becomes: read from Kafka → send Discord alert
-
 ---
 
 ## Scraper Improvements
