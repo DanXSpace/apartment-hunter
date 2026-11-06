@@ -1,4 +1,5 @@
 import logging
+import re
 
 import pytest
 
@@ -8,7 +9,7 @@ from apartment_hunter.appdata import AlreadyRunning, DataDir
 def test_second_acquire_in_same_data_dir_fails(tmp_path):
     data = DataDir(tmp_path)
     with data.lock():
-        with pytest.raises(AlreadyRunning, match=str(tmp_path.resolve())):
+        with pytest.raises(AlreadyRunning, match=re.escape(str(tmp_path.resolve()))):
             with data.lock():
                 pass
 
