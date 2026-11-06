@@ -1,0 +1,9 @@
+.git
+.venv
+.env
+config.toml
+data/
+tests/
+**/__pycache__
+*.pyc
+seen_listings.txt

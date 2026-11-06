@@ -1,0 +1,135 @@
+from __future__ import annotations
+
+import sqlite3
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+
+from apartment_hunter.models import Listing
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS searches (
+    name TEXT PRIMARY KEY,
+    seeded INTEGER NOT NULL DEFAULT 0,
+    consecutive_failures INTEGER NOT NULL DEFAULT 0,
+    broken_alert_sent INTEGER NOT NULL DEFAULT 0,
+    last_success TEXT
+);
+CREATE TABLE IF NOT EXISTS listings (
+    search_name TEXT NOT NULL,
+    listing_id TEXT NOT NULL,
+    url TEXT,
+    address TEXT,
+    price_min INTEGER,
+    first_seen TEXT NOT NULL,
+    last_seen TEXT NOT NULL,
+    PRIMARY KEY (search_name, listing_id)
+);
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+"""
+
+
+@dataclass(frozen=True)
+class SeenListing:
+    listing_id: str
+    price_min: int | None
+
+
+@dataclass(frozen=True)
+class SearchState:
+    seeded: bool
+    consecutive_failures: int
+    broken_alert_sent: bool
+
+
+class Store:
+    def __init__(self, path: Path | str):
+        if str(path) != ":memory:":
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+        self.db = sqlite3.connect(path)
+        self.db.executescript(SCHEMA)
+
+    def close(self) -> None:
+        self.db.close()
+
+    # --- searches -------------------------------------------------------
+    def _ensure_search(self, name: str) -> None:
+        self.db.execute("INSERT OR IGNORE INTO searches (name) VALUES (?)", (name,))
+
+    def search_state(self, name: str) -> SearchState:
+        self._ensure_search(name)
+        row = self.db.execute(
+            "SELECT seeded, consecutive_failures, broken_alert_sent FROM searches WHERE name = ?",
+            (name,),
+        ).fetchone()
+        return SearchState(bool(row[0]), row[1], bool(row[2]))
+
+    def mark_seeded(self, name: str) -> None:
+        with self.db:
+            self._ensure_search(name)
+            self.db.execute("UPDATE searches SET seeded = 1 WHERE name = ?", (name,))
+
+    def record_failure(self, name: str) -> int:
+        with self.db:
+            self._ensure_search(name)
+            self.db.execute(
+                "UPDATE searches SET consecutive_failures = consecutive_failures + 1 WHERE name = ?",
+                (name,),
+            )
+        return self.search_state(name).consecutive_failures
+
+    def record_success(self, name: str) -> None:
+        with self.db:
+            self._ensure_search(name)
+            self.db.execute(
+                "UPDATE searches SET consecutive_failures = 0, broken_alert_sent = 0, "
+                "last_success = ? WHERE name = ?",
+                (datetime.now().isoformat(), name),
+            )
+
+    def mark_broken_alert_sent(self, name: str) -> None:
+        with self.db:
+            self.db.execute("UPDATE searches SET broken_alert_sent = 1 WHERE name = ?", (name,))
+
+    # --- listings -------------------------------------------------------
+    def get_listing(self, search: str, listing_id: str) -> SeenListing | None:
+        row = self.db.execute(
+            "SELECT listing_id, price_min FROM listings WHERE search_name = ? AND listing_id = ?",
+            (search, listing_id),
+        ).fetchone()
+        return SeenListing(row[0], row[1]) if row else None
+
+    def save_listing(self, search: str, listing: Listing) -> None:
+        now = datetime.now().isoformat()
+        with self.db:
+            self.db.execute(
+                """INSERT INTO listings (search_name, listing_id, url, address, price_min,
+                                         first_seen, last_seen)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT (search_name, listing_id) DO UPDATE SET
+                       url = excluded.url, address = excluded.address,
+                       price_min = COALESCE(excluded.price_min, listings.price_min),
+                       last_seen = excluded.last_seen""",
+                (search, listing.listing_id, listing.url, listing.address, listing.price_min,
+                 now, now),
+            )
+
+    # --- one-time import from v0.1 -------------------------------------
+    def import_legacy_seen_file(self, path: Path, search_names: list[str]) -> int:
+        """Imports v0.1's seen_listings.txt once. Returns the number of IDs imported."""
+        if not path.exists():
+            return 0
+        if self.db.execute("SELECT 1 FROM meta WHERE key = 'legacy_imported'").fetchone():
+            return 0
+        ids = {line.strip() for line in path.read_text(encoding="utf-8").splitlines()} - {""}
+        now = datetime.now().isoformat()
+        with self.db:
+            for name in search_names:
+                self._ensure_search(name)
+                self.db.executemany(
+                    "INSERT OR IGNORE INTO listings (search_name, listing_id, first_seen, last_seen)"
+                    " VALUES (?, ?, ?, ?)",
+                    [(name, i, now, now) for i in ids],
+                )
+            self.db.execute("INSERT INTO meta (key, value) VALUES ('legacy_imported', ?)", (now,))
+        return len(ids)

@@ -14,3 +14,7 @@ wheels/
 
 # Runtime state
 seen_listings.txt
+
+# Local config and runtime data
+config.toml
+data/

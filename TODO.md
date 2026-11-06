@@ -1,50 +1,20 @@
 # Apartment Hunter — TODO
 
-## Vision
-A CLI tool where the user pastes an apartments.com URL (with all filters pre-applied)
-and the system handles everything else: scraping on a schedule, deduplicating listings,
-and sending Discord alerts automatically.
+## Next: v0.3 desktop app
 
-```
-uv run python main.py "https://www.apartments.com/..."
-```
+Tray icon + local web UI so non-technical users can install and use it without a terminal.
+Full spec: https://github.com/DanXSpace/apartment-hunter/issues/1
 
----
+## Ideas (not scheduled)
 
-## In Progress / Next Up
+- Commute distance from a work address (Nominatim or Google Maps).
+- Other notification channels (ntfy, email, Telegram) behind the Notifier interface.
+- Other listing sites behind the Scraper interface.
+- Refresh the parser fixture from time to time so tests track the live page layout.
 
-- [ ] **Pagination** — scraper only fetches page 1
-  - apartments.com uses path-based pagination: `.../2/`, `.../3/`
-  - Loop until a page returns no cards
+## Known limitations
 
----
-
-## Scraper Improvements
-
-- [ ] **Scrape actual baths** — currently hardcoded to `1.0`
-- [ ] **Handle multi-unit listings** — some cards represent a building with a
-      price range, not a single unit. Decide whether to skip or handle them.
-
----
-
-## Stretch Goals
-
-- [ ] **Commute distance** — calculate real distance from a work address
-  - Accept work address as a second CLI arg or in `.env`
-  - Use Nominatim (free) or Google Maps API to calculate miles
-  - Re-enable commute filter in consumer
-
-- [ ] **Notification cooldown** — even with dedup, add a "don't re-alert
-      on this listing for X days" window
-
----
-
-## Done
-
-- [x] Discord embed formatting (image, price, beds, baths, pets, commute, timestamp)
-- [x] Image URL scraping
-- [x] 15-minute schedule via `schedule`
-- [x] Fix missing `scraped_at` field
-- [x] Per-card error handling in scraper
-- [x] README with architecture diagram
-- [x] `.env.example`
+- apartments.com blocks headless and automation-driven browsers. Only `chromium` mode
+  (browser opens the URL itself, page is read afterwards) gets through; Docker runs it in a
+  virtual display.
+- Searches with more than 10 result pages (~400 listings) are truncated; narrow the filters.

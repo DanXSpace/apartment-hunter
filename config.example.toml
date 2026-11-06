@@ -1,0 +1,43 @@
+# Copy to config.toml and edit. Values like "${VAR}" are read from the environment / .env.
+
+# Default Discord webhook for every search (falls back to DISCORD_WEBHOOK_URL if omitted).
+webhook_url = "${DISCORD_WEBHOOK_URL}"
+
+# Default minutes between runs (each run is jittered ±20%). Minimum 10.
+interval_minutes = 15
+
+# SQLite file holding seen listings and scraper health. Override with DATABASE_PATH.
+database = "data/apartment_hunter.db"
+
+# Send a "scraper looks broken" alert after this many failed runs in a row.
+failure_alert_threshold = 3
+
+[browser]
+# "chromium": launches your installed Chromium/Chrome/Brave with the search URL, then only
+#             reads the page. This is the mode that gets past apartments.com's bot protection.
+# "stealth":  EXPERIMENTAL. Scrapling's StealthySession driving the same browser. Currently
+#             blocked by apartments.com ("Access Denied"); kept for future Scrapling releases.
+mode = "chromium"
+# Leave empty to auto-detect chromium-browser / chromium / google-chrome / brave-browser.
+executable = ""
+# Headless is currently blocked by apartments.com. Keep false (Docker uses a virtual display).
+headless = false
+# Persistent browser profile, so bot-protection cookies survive between runs.
+profile_dir = "data/browser-profile"
+extra_args = []
+
+[scraper]
+max_pages = 10
+page_delay_seconds = [3, 8]
+
+# One block per search. Build the URL on apartments.com with all your filters applied.
+# The name is the key for "already seen" state, so renaming a search starts it fresh.
+[[search]]
+name = "Downtown 2BR"
+url = "https://www.apartments.com/philadelphia-pa/min-2-bedrooms-under-2400/"
+
+# [[search]]
+# name = "Suburbs"
+# url = "https://www.apartments.com/..."
+# interval_minutes = 30
+# webhook_url = "${SUBURBS_WEBHOOK_URL}"
