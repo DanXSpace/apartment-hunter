@@ -58,7 +58,7 @@ class SearchRunner:
                 continue
             try:
                 notifier.send_listing(listing, search.name,
-                                      previous_price=seen.price_min if dropped else None)
+                                      previous_price=seen.price_min if seen and dropped else None)
             except NotifyError as e:
                 log.error("[%s] Alert for %s not delivered (will retry next run): %s",
                           search.name, listing.listing_id, e)

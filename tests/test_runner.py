@@ -58,7 +58,7 @@ def test_alert_existing_skips_seeding():
     runner = SearchRunner(scraper, store, lambda s: notifier, alert_existing=True)
     scraper.next = [[make_listing("a"), make_listing("b")]]
     runner.run(SEARCH)
-    assert [l for l, _ in notifier.listings] == ["a", "b"]
+    assert [listing_id for listing_id, _ in notifier.listings] == ["a", "b"]
 
 
 def test_new_listing_alerts_once(env):

@@ -53,8 +53,8 @@ def find_browser(configured: str | None) -> str:
             raise FetchError(f"Configured browser not found: {configured}")
         return path
     for name in BROWSER_CANDIDATES:
-        if path := shutil.which(name):
-            return path
+        if found := shutil.which(name):
+            return found
     raise FetchError(
         "No Chromium-family browser found. Install chromium or set [browser] executable in config."
     )

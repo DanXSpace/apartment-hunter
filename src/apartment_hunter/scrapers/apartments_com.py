@@ -11,7 +11,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from scrapling.parser import Selector
 
-from apartment_hunter.fetchers import FetchError, Fetcher
+from apartment_hunter.fetchers import Fetcher, FetchError
 from apartment_hunter.models import Listing, ScrapeResult
 from apartment_hunter.scrapers import BlockedError, ScrapeError
 

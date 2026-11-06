@@ -66,8 +66,8 @@ def test_parses_every_card_on_real_page(fixture_html):
     listings, has_next = parse_page(fixture_html("apartments_com/search_page1.html"))
     assert len(listings) == 40
     assert has_next
-    assert all(l.url.startswith("https://www.apartments.com/") for l in listings)
-    assert all(l.address and l.price_min and l.beds_min is not None for l in listings)
+    assert all(x.url.startswith("https://www.apartments.com/") for x in listings)
+    assert all(x.address and x.price_min and x.beds_min is not None for x in listings)
 
 
 def test_multi_unit_card_keeps_ranges(fixture_html):
@@ -84,7 +84,7 @@ def test_multi_unit_card_keeps_ranges(fixture_html):
 
 def test_total_monthly_price_prefix(fixture_html):
     listings, _ = parse_page(fixture_html("apartments_com/search_page1.html"))
-    by_id = {l.listing_id: l for l in listings}
+    by_id = {x.listing_id: x for x in listings}
     assert (by_id["h2yzew1"].price_min, by_id["h2yzew1"].price_max) == (1454, 2216)
     assert (by_id["gp3x56x"].price_min, by_id["gp3x56x"].price_max) == (2375, 2375)
 
