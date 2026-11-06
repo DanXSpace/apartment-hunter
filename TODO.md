@@ -10,7 +10,7 @@ native-launch Chromium fetching, SQLite state, seeding, price-drop and health al
 
 - [ ] Long-running scheduled mode (`apartment-hunter` without `--once`) over a few hours.
 - [ ] `docker compose up` with real Docker (so far only tested with `podman build` / `podman run`).
-- [ ] CI green on GitHub (test job and Docker build job).
+- [x] CI green on GitHub (test job and Docker build job).
 
 ## v0.3 — desktop app (next)
 
