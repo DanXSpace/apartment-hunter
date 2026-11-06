@@ -11,7 +11,7 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 - **Comment on an issue**: `gh issue comment <number> --body "..."`
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
 - **Close**: `gh issue close <number> --comment "..."`
-- **Next ticket of a spec** ("first ticket", "next ticket"): the spec issue's first open sub-issue (`gh api repos/<owner>/<repo>/issues/<spec>/sub_issues`, in that order) with no open blockers (`issue_dependencies_summary.blocked_by == 0`) and no assignee. The spec issue itself is never the ticket. Skip a sub-issue that a commit on the current branch already tags `(#N)`: it is done but not yet pushed, so GitHub still shows it open.
+- **Next ticket of a spec** ("first ticket", "next ticket"): the spec issue's first open sub-issue (`gh api repos/<owner>/<repo>/issues/<spec>/sub_issues`, in that order) with no open blockers (`issue_dependencies_summary.blocked_by == 0`) and no assignee. The spec issue itself is never the ticket. Skip a sub-issue that a commit on the current branch already tags `(#N)`: it is done but not yet pushed, so GitHub still shows it open. Likewise count a blocker as closed when a commit on the current branch tags it `(#N)`.
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
