@@ -1,5 +1,8 @@
+from pathlib import Path
+
 import pytest
 
+from apartment_hunter.appdata import DataDir
 from apartment_hunter.config import ConfigError, load_settings
 
 URL = "https://www.apartments.com/philadelphia-pa/"
@@ -73,3 +76,17 @@ def test_env_overrides_browser(monkeypatch, tmp_path):
     s = load_settings(None, quick_url=URL)
     assert s.browser.headless and s.browser.mode == "stealth"
     assert s.browser.extra_args == ["--no-sandbox", "--disable-dev-shm-usage"]
+
+
+def test_data_dir_supplies_database_and_profile_defaults(tmp_path):
+    cfg = write(tmp_path, f'webhook_url="https://h"\n[[search]]\nname="a"\nurl="{URL}"\n')
+    s = load_settings(cfg, data_dir=DataDir(tmp_path / "appdata"))
+    assert s.database == tmp_path / "appdata" / "apartment_hunter.db"
+    assert s.browser.profile_dir == tmp_path / "appdata" / "browser-profile"
+
+
+def test_without_data_dir_defaults_stay_relative_to_working_dir(tmp_path):
+    cfg = write(tmp_path, f'webhook_url="https://h"\n[[search]]\nname="a"\nurl="{URL}"\n')
+    s = load_settings(cfg)
+    assert s.database == Path("data/apartment_hunter.db")
+    assert s.browser.profile_dir == Path("data/browser-profile")

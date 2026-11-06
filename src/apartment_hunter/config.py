@@ -7,6 +7,8 @@ import tomllib
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from apartment_hunter.appdata import DataDir
+
 log = logging.getLogger(__name__)
 
 MIN_INTERVAL_MINUTES = 10
@@ -55,12 +57,15 @@ def _bool_env(name: str) -> bool | None:
     return None if v is None else v.strip().lower() in ("1", "true", "yes", "on")
 
 
-def load_settings(config_path: Path | None, quick_url: str | None = None) -> Settings:
+def load_settings(config_path: Path | None, quick_url: str | None = None,
+                  data_dir: DataDir | None = None) -> Settings:
     """Load config.toml (if present), then apply env overrides.
 
     `quick_url` replaces the configured searches with a single search named "default",
     so `apartment-hunter "<url>"` works with nothing but DISCORD_WEBHOOK_URL set.
+    `data_dir` supplies the default database and browser profile paths (default: `./data`).
     """
+    data_dir = data_dir or DataDir(Path("data"))
     raw: dict = {}
     if config_path and config_path.exists():
         with config_path.open("rb") as f:
@@ -107,7 +112,7 @@ def load_settings(config_path: Path | None, quick_url: str | None = None) -> Set
         mode=b.get("mode", "chromium"),
         executable=b.get("executable") or None,
         headless=bool(b.get("headless", False)),
-        profile_dir=Path(b.get("profile_dir", "data/browser-profile")),
+        profile_dir=Path(b.get("profile_dir", data_dir.browser_profile)),
         extra_args=list(b.get("extra_args", [])),
     )
     if (env_headless := _bool_env("BROWSER_HEADLESS")) is not None:
@@ -124,7 +129,7 @@ def load_settings(config_path: Path | None, quick_url: str | None = None) -> Set
     sc = raw.get("scraper", {})
     delay = sc.get("page_delay_seconds", [3, 8])
     return Settings(
-        database=Path(os.getenv("DATABASE_PATH") or raw.get("database", "data/apartment_hunter.db")),
+        database=Path(os.getenv("DATABASE_PATH") or raw.get("database", data_dir.database)),
         searches=searches,
         browser=browser,
         max_pages=int(sc.get("max_pages", 10)),

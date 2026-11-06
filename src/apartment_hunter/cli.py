@@ -8,7 +8,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from apartment_hunter.config import ConfigError, load_settings
+from apartment_hunter.appdata import LOG_FORMAT, AlreadyRunning, DataDir
+from apartment_hunter.config import ConfigError, Settings, load_settings
 from apartment_hunter.fetchers import FetchError, make_fetcher
 from apartment_hunter.notifiers import NotifyError
 from apartment_hunter.notifiers.discord import DiscordNotifier
@@ -29,22 +30,52 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("url", nargs="?",
                         help="Quick start: a single apartments.com search URL (ignores [[search]])")
     parser.add_argument("-c", "--config", type=Path,
-                        default=Path(os.getenv("APARTMENT_HUNTER_CONFIG", "config.toml")))
+                        help="Config file (default: config.toml, or the app-data one with --app-data)")
+    parser.add_argument("--app-data", action="store_true",
+                        help="Use the desktop app's data directory for config, database, "
+                             "browser profile and logs (-c still picks the config file)")
     parser.add_argument("--once", action="store_true", help="Run every search once and exit")
     parser.add_argument("--alert-existing", action="store_true",
                         help="On a search's first run, alert on every current listing")
     args = parser.parse_args(argv)
 
-    logging.basicConfig(
-        level=os.getenv("LOG_LEVEL", "INFO").upper(),
-        format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
-    )
+    logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper(), format=LOG_FORMAT,
+                        stream=sys.stdout)
 
+    app_data = DataDir.app_data() if args.app_data else None
+    if args.config:
+        config_path = args.config
+    elif app_data:
+        config_path = app_data.config
+    else:
+        config_path = Path(os.getenv("APARTMENT_HUNTER_CONFIG", "config.toml"))
     try:
-        settings = load_settings(args.config, quick_url=args.url)
+        settings = load_settings(config_path, quick_url=args.url, data_dir=app_data)
+    except ConfigError as e:
+        log.error("%s", e)
+        return 2
+
+    # Without --app-data, the CLI's data directory is wherever its database lives.
+    data = app_data or DataDir(settings.database.parent)
+    try:
+        with data.lock():
+            handler = data.log_handler()
+            logging.getLogger().addHandler(handler)
+            try:
+                return _run(settings, once=args.once, alert_existing=args.alert_existing)
+            finally:
+                logging.getLogger().removeHandler(handler)
+                handler.close()
+    except AlreadyRunning as e:
+        log.error("%s", e)
+        return 2
+
+
+def _run(settings: Settings, once: bool, alert_existing: bool) -> int:
+    try:
         b = settings.browser
         fetcher = make_fetcher(b.mode, b.executable, b.profile_dir, b.headless, b.extra_args)
-    except (ConfigError, FetchError) as e:
+    except FetchError as e:
         log.error("%s", e)
         return 2
 
@@ -67,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
         store=store,
         notifier_for=lambda s: notifiers.setdefault(s.webhook_url, DiscordNotifier(s.webhook_url)),
         failure_alert_threshold=settings.failure_alert_threshold,
-        alert_existing=args.alert_existing,
+        alert_existing=alert_existing,
     )
     log.info("Watching %d search(es) with %s browser mode", len(settings.searches), b.mode)
     crashed: list[str] = []
@@ -82,7 +113,7 @@ def main(argv: list[str] | None = None) -> int:
     scheduler = Scheduler(run, settings.searches)
     scheduler.start()
     try:
-        if args.once:
+        if once:
             scheduler.run_pending()  # every search is due at start
         else:
             scheduler.serve_forever()

@@ -76,8 +76,11 @@ The search **name** is how "already seen" is tracked. Renaming a search (or givi
 | `apartment-hunter --once` | Run every search once and exit (handy for cron or testing) |
 | `apartment-hunter --alert-existing` | On a search's first run, alert on every current listing instead of recording them silently |
 | `apartment-hunter -c path/to/config.toml` | Use a different config file (or set `APARTMENT_HUNTER_CONFIG`) |
+| `apartment-hunter --app-data` | Use the desktop app's per-user data folder (config, database, browser profile, logs) instead of `config.toml` and `data/` in the working directory |
 | `LOG_LEVEL` | `DEBUG`, `INFO` (default), `WARNING`… |
 | `BROWSER_EXECUTABLE`, `BROWSER_HEADLESS`, `BROWSER_MODE`, `BROWSER_EXTRA_ARGS`, `DATABASE_PATH` | Override the matching config values |
+
+Logs also go to `logs/apartment-hunter.log` in the folder holding the database (`data/` by default), rotated at about 1 MB. Only one copy can run against the same data folder at a time; a second one exits with a message saying so.
 
 Upgrading from v0.1? An existing `seen_listings.txt` in the working directory is imported once on first start. The Kafka-based v0.1 is preserved at the [`v0.1-kafka`](https://github.com/DanXSpace/apartment-hunter/tree/v0.1-kafka) tag.
 
@@ -124,6 +127,7 @@ graph LR
 ```
 src/apartment_hunter/
 ├── cli.py                 # entry point: config, wiring, --once / scheduler loop
+├── appdata.py             # data directory layout, single-instance lock, log file
 ├── config.py              # config.toml + env loading and validation
 ├── runner.py              # one run of a search: seeding, alerts, health; scheduler
 ├── storage.py             # SQLite: seen listings, last price, search health
