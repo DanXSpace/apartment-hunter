@@ -20,6 +20,8 @@ apartment-hunter = "apartment_hunter.cli:main"
 dev = [
     "mypy>=2.4.1",
     "pytest>=8",
+    "pytest-socket>=0.8.1",
+    "pytest-timeout>=2.4.0",
     "ruff>=0.17.4",
 ]
 
@@ -32,6 +34,9 @@ packages = ["src/apartment_hunter"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Tests are offline (see CODING_STANDARDS.md): a network call fails at once instead of hanging
+addopts = "--disable-socket"
+timeout = 10
 filterwarnings = [
     # anyio's pytest plugin (pulled in by scrapling) uses a pytest alias slated for removal
     "ignore:_pytest.python.CallSpec2 has been renamed",

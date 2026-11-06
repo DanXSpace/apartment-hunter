@@ -1,5 +1,4 @@
 import logging
-import sys
 
 import pytest
 
@@ -28,16 +27,14 @@ def test_stale_lock_file_from_crashed_process_is_taken_over(tmp_path):
         pass
 
 
-@pytest.mark.skipif(sys.platform != "linux", reason="XDG_DATA_HOME is the Linux convention")
-def test_app_data_dir_is_the_per_user_data_location(monkeypatch, tmp_path):
-    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+def test_app_data_dir_is_the_per_user_data_location(app_data_root):
     data = DataDir.app_data()
-    assert data.root == tmp_path / "apartment-hunter"
-    assert data.config == tmp_path / "apartment-hunter" / "config.toml"
-    assert data.database == tmp_path / "apartment-hunter" / "apartment_hunter.db"
-    assert data.browser_profile == tmp_path / "apartment-hunter" / "browser-profile"
-    assert data.log_file == tmp_path / "apartment-hunter" / "logs" / "apartment-hunter.log"
-    assert data.port_file == tmp_path / "apartment-hunter" / "port"
+    assert data.root == app_data_root
+    assert data.config == app_data_root / "config.toml"
+    assert data.database == app_data_root / "apartment_hunter.db"
+    assert data.browser_profile == app_data_root / "browser-profile"
+    assert data.log_file == app_data_root / "logs" / "apartment-hunter.log"
+    assert data.port_file == app_data_root / "port"
 
 
 def test_log_handler_writes_to_the_log_file_in_the_data_dir(tmp_path):

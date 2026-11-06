@@ -1,3 +1,4 @@
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -6,6 +7,19 @@ import pytest
 from apartment_hunter.models import Listing
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+@pytest.fixture
+def app_data_root(monkeypatch, tmp_path) -> Path:
+    """Point this OS's per-user data location into tmp_path; return where the app's folder should be."""
+    if sys.platform == "win32":  # %LOCALAPPDATA%\apartment-hunter
+        monkeypatch.setenv("WIN_PD_OVERRIDE_LOCAL_APPDATA", str(tmp_path / "Local"))
+        return tmp_path / "Local" / "apartment-hunter"
+    if sys.platform == "darwin":  # ~/Library/Application Support/apartment-hunter
+        monkeypatch.setenv("HOME", str(tmp_path))
+        return tmp_path / "Library" / "Application Support" / "apartment-hunter"
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "share"))  # ~/.local/share/apartment-hunter
+    return tmp_path / "share" / "apartment-hunter"
 
 
 @pytest.fixture
