@@ -50,6 +50,7 @@ class Scheduler:
         self._cond = threading.Condition()
         self._run_lock = threading.Lock()  # held across runs: never two at once
         self._serving = False
+        self._current: str | None = None
 
     # -- control (safe to call from any thread) --
 
@@ -81,6 +82,18 @@ class Scheduler:
     def is_paused(self, name: str) -> bool:
         return name in self._paused
 
+    # -- reading state (safe from any thread) --
+
+    @property
+    def current(self) -> str | None:
+        """The search being run right now, if any."""
+        return self._current
+
+    def next_run(self, name: str) -> float:
+        """When the search is next due on its schedule, in the scheduler's clock."""
+        with self._cond:
+            return self._next_run[name]
+
     def run_now(self, name: str) -> None:
         """Queue a search to run next, even if paused. It still runs one at a time."""
         if name not in self._searches:
@@ -101,10 +114,13 @@ class Scheduler:
                     if not self._running or (name := self._take_next_due()) is None:
                         return ran
                     search = self._searches[name]
+                self._current = name
                 try:
                     self._run(search)
                 except Exception:  # never let one bad run kill the scheduler
                     log.exception("[%s] Unexpected error", name)
+                finally:
+                    self._current = None
                 ran += 1
                 with self._cond:
                     delay = self._next_delay(search.interval_minutes)

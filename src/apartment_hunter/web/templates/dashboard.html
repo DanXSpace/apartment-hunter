@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}
+  {% if problem %}<p class="problem">{{ problem }}</p>{% endif %}
+  <h2>Searches</h2>
+  {% include "status.html" %}
+{% endblock %}

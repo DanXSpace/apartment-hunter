@@ -42,6 +42,9 @@ The Discord channel address a search's alerts are sent to; each search uses the 
 
 ## Running
 
+**Needs attention**:
+A search whose latest run failed, as the desktop app's status table shows it. It shows after one failure, before the search is **broken** and a health alert goes out.
+
 **Data directory**:
 The folder holding one installation's config, database, browser profile and logs. Only one copy of Apartment Hunter runs against a data directory at a time.
 _Avoid_: workspace, profile

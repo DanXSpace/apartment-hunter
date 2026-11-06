@@ -1,0 +1,18 @@
+<table id="status" hx-get="/status" hx-trigger="every 5s" hx-swap="outerHTML">
+  <thead>
+    <tr><th>Search</th><th>Status</th><th>Last run</th><th>Next run</th><th>Listings</th></tr>
+  </thead>
+  <tbody>
+    {% for s in statuses %}
+    <tr>
+      <td>{{ s.name }}</td>
+      <td class="state state-{{ s.state | lower | replace(' ', '-') }}">{{ s.state }}</td>
+      <td>{{ s.last_run }}</td>
+      <td>{{ s.next_run }}</td>
+      <td>{{ s.listings }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5">No searches yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>

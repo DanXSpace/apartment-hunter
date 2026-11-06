@@ -1,0 +1,24 @@
+:root {
+  --bg: #fafaf9; --fg: #1c1917; --muted: #78716c; --line: #e7e5e4;
+  --ok: #15803d; --run: #1d4ed8; --warn: #b45309; --idle: #78716c;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1917; --fg: #f5f5f4; --muted: #a8a29e; --line: #44403c;
+    --ok: #4ade80; --run: #93c5fd; --warn: #fbbf24; --idle: #a8a29e;
+  }
+}
+body { margin: 0; background: var(--bg); color: var(--fg);
+       font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header, main { max-width: 56rem; margin: 0 auto; padding: 0 1rem; }
+h1 { font-size: 1.4rem; }
+h2 { font-size: 1.1rem; margin-top: 2rem; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: .5rem .75rem; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 500; font-size: .9rem; }
+.state { font-weight: 600; }
+.state-healthy { color: var(--ok); }
+.state-running { color: var(--run); }
+.state-needs-attention { color: var(--warn); }
+.state-paused, .state-not-run-yet { color: var(--idle); }
+.problem { border-left: 4px solid var(--warn); padding: .5rem 1rem; }
