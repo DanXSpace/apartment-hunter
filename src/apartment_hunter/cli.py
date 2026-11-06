@@ -12,7 +12,8 @@ from apartment_hunter.config import ConfigError, load_settings
 from apartment_hunter.fetchers import FetchError, make_fetcher
 from apartment_hunter.notifiers import NotifyError
 from apartment_hunter.notifiers.discord import DiscordNotifier
-from apartment_hunter.runner import SearchRunner, run_forever
+from apartment_hunter.runner import SearchRunner
+from apartment_hunter.scheduler import Scheduler
 from apartment_hunter.scrapers.apartments_com import ApartmentsComScraper
 from apartment_hunter.storage import Store
 
@@ -69,17 +70,27 @@ def main(argv: list[str] | None = None) -> int:
         alert_existing=args.alert_existing,
     )
     log.info("Watching %d search(es) with %s browser mode", len(settings.searches), b.mode)
+    crashed: list[str] = []
+
+    def run(search):
+        try:
+            runner.run(search)
+        except Exception:
+            crashed.append(search.name)
+            raise  # the scheduler logs it and carries on
+
+    scheduler = Scheduler(run, settings.searches)
+    scheduler.start()
     try:
         if args.once:
-            for search in settings.searches:
-                runner.run(search)
+            scheduler.run_pending()  # every search is due at start
         else:
-            run_forever(runner, settings.searches)
+            scheduler.serve_forever()
     except KeyboardInterrupt:
         log.info("Stopped")
     finally:
         store.close()
-    return 0
+    return 1 if crashed else 0
 
 
 if __name__ == "__main__":

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import logging
-import random
-import time
 from collections.abc import Callable
 
 from apartment_hunter.config import Search
@@ -11,8 +9,6 @@ from apartment_hunter.scrapers import ScrapeError, Scraper
 from apartment_hunter.storage import Store
 
 log = logging.getLogger(__name__)
-
-JITTER = 0.2
 
 
 class SearchRunner:
@@ -96,27 +92,3 @@ class SearchRunner:
         except NotifyError as e:
             log.error("[%s] Could not send status message: %s", search.name, e)
             return False
-
-
-def next_delay_seconds(interval_minutes: float) -> float:
-    return interval_minutes * 60 * random.uniform(1 - JITTER, 1 + JITTER)
-
-
-def run_forever(runner: SearchRunner, searches: list[Search],
-                sleep: Callable[[float], None] = time.sleep,
-                clock: Callable[[], float] = time.monotonic) -> None:
-    """Run every search now, then each on its own jittered interval. Never in parallel."""
-    next_run = {s.name: clock() for s in searches}
-    by_name = {s.name: s for s in searches}
-    while True:
-        name = min(next_run, key=next_run.get)
-        wait = next_run[name] - clock()
-        if wait > 0:
-            sleep(wait)
-        search = by_name[name]
-        try:
-            runner.run(search)
-        except Exception:  # never let one bad run kill the loop
-            log.exception("[%s] Unexpected error", name)
-        next_run[name] = clock() + next_delay_seconds(search.interval_minutes)
-        log.info("[%s] Next run in %.0f min", name, (next_run[name] - clock()) / 60)
