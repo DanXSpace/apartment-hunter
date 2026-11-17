@@ -1,0 +1,2067 @@
+[
+{
+"hostname": "abilene",
+"lat": 32.448601,
+"lon": -99.732803
+},
+{
+"hostname": "akroncanton",
+"lat": 41.081402,
+"lon": -81.519203
+},
+{
+"hostname": "albany",
+"lat": 42.6525,
+"lon": -73.756699
+},
+{
+"hostname": "albanyga",
+"lat": 31.575026,
+"lon": -84.159393
+},
+{
+"hostname": "albuquerque",
+"lat": 35.0844,
+"lon": -106.651001
+},
+{
+"hostname": "allentown",
+"lat": 40.599998,
+"lon": -75.5
+},
+{
+"hostname": "altoona",
+"lat": 40.5186,
+"lon": -78.394997
+},
+{
+"hostname": "amarillo",
+"lat": 35.221901,
+"lon": -101.831001
+},
+{
+"hostname": "ames",
+"lat": 42.034698,
+"lon": -93.619698
+},
+{
+"hostname": "anchorage",
+"lat": 61.196201,
+"lon": -149.886002
+},
+{
+"hostname": "annapolis",
+"lat": 38.978298,
+"lon": -76.4925
+},
+{
+"hostname": "annarbor",
+"lat": 42.270802,
+"lon": -83.726402
+},
+{
+"hostname": "appleton",
+"lat": 44.261902,
+"lon": -88.415298
+},
+{
+"hostname": "asheville",
+"lat": 35.6008,
+"lon": -82.554199
+},
+{
+"hostname": "ashtabula",
+"lat": 41.865101,
+"lon": -80.789803
+},
+{
+"hostname": "athensga",
+"lat": 33.9608,
+"lon": -83.378098
+},
+{
+"hostname": "athensohio",
+"lat": 39.329201,
+"lon": -82.101402
+},
+{
+"hostname": "atlanta",
+"lat": 33.748901,
+"lon": -84.3881
+},
+{
+"hostname": "auburn",
+"lat": 32.609699,
+"lon": -85.480797
+},
+{
+"hostname": "augusta",
+"lat": 33.470798,
+"lon": -81.974998
+},
+{
+"hostname": "austin",
+"lat": 30.266899,
+"lon": -97.742798
+},
+{
+"hostname": "bakersfield",
+"lat": 35.373299,
+"lon": -119.017998
+},
+{
+"hostname": "baltimore",
+"lat": 39.307999,
+"lon": -76.616997
+},
+{
+"hostname": "batonrouge",
+"lat": 30.458099,
+"lon": -91.140198
+},
+{
+"hostname": "battlecreek",
+"lat": 42.321201,
+"lon": -85.179703
+},
+{
+"hostname": "beaumont",
+"lat": 30.0762,
+"lon": -94.112999
+},
+{
+"hostname": "bellingham",
+"lat": 48.759701,
+"lon": -122.487
+},
+{
+"hostname": "bemidji",
+"lat": 47.473598,
+"lon": -94.880302
+},
+{
+"hostname": "bend",
+"lat": 44.0583,
+"lon": -121.314003
+},
+{
+"hostname": "bgky",
+"lat": 36.990299,
+"lon": -86.443604
+},
+{
+"hostname": "bham",
+"lat": 33.520599,
+"lon": -86.802498
+},
+{
+"hostname": "bigbend",
+"lat": 29.200123,
+"lon": -103.293457
+},
+{
+"hostname": "billings",
+"lat": 45.783298,
+"lon": -108.500999
+},
+{
+"hostname": "binghamton",
+"lat": 42.098598,
+"lon": -75.918297
+},
+{
+"hostname": "bismarck",
+"lat": 46.807579,
+"lon": -100.777588
+},
+{
+"hostname": "blacksburg",
+"lat": 37.229401,
+"lon": -80.4142
+},
+{
+"hostname": "bloomington",
+"lat": 39.165298,
+"lon": -86.526398
+},
+{
+"hostname": "bn",
+"lat": 40.4842,
+"lon": -88.993599
+},
+{
+"hostname": "boise",
+"lat": 43.613602,
+"lon": -116.202003
+},
+{
+"hostname": "boone",
+"lat": 36.216702,
+"lon": -81.674698
+},
+{
+"hostname": "boston",
+"lat": 42.358299,
+"lon": -71.060303
+},
+{
+"hostname": "boulder",
+"lat": 40.014999,
+"lon": -105.269997
+},
+{
+"hostname": "bozeman",
+"lat": 45.679699,
+"lon": -111.039001
+},
+{
+"hostname": "brainerd",
+"lat": 46.354511,
+"lon": -94.196777
+},
+{
+"hostname": "brownsville",
+"lat": 25.9014,
+"lon": -97.4972
+},
+{
+"hostname": "brunswick",
+"lat": 31.1497,
+"lon": -81.491699
+},
+{
+"hostname": "buffalo",
+"lat": 42.886398,
+"lon": -78.878601
+},
+{
+"hostname": "butte",
+"lat": 46.004593,
+"lon": -112.543945
+},
+{
+"hostname": "capecod",
+"lat": 41.6889,
+"lon": -70.296898
+},
+{
+"hostname": "carbondale",
+"lat": 37.7272,
+"lon": -89.216698
+},
+{
+"hostname": "catskills",
+"lat": 42,
+"lon": -74.383301
+},
+{
+"hostname": "cedarrapids",
+"lat": 42.008301,
+"lon": -91.643898
+},
+{
+"hostname": "cenla",
+"lat": 31.297327,
+"lon": -92.469177
+},
+{
+"hostname": "centralmich",
+"lat": 43.598,
+"lon": -84.780998
+},
+{
+"hostname": "cfl",
+"lat": 27.5392,
+"lon": -81.509903
+},
+{
+"hostname": "chambana",
+"lat": 40.110001,
+"lon": -88.25
+},
+{
+"hostname": "chambersburg",
+"lat": 39.9333,
+"lon": -77.633301
+},
+{
+"hostname": "charleston",
+"lat": 32.776402,
+"lon": -79.931099
+},
+{
+"hostname": "charlestonwv",
+"lat": 38.349701,
+"lon": -81.632797
+},
+{
+"hostname": "charlotte",
+"lat": 35.226898,
+"lon": -80.8433
+},
+{
+"hostname": "charlottesville",
+"lat": 38.0345,
+"lon": -78.486504
+},
+{
+"hostname": "chattanooga",
+"lat": 35.045601,
+"lon": -85.3097
+},
+{
+"hostname": "chautauqua",
+"lat": 42.209702,
+"lon": -79.466698
+},
+{
+"hostname": "chicago",
+"lat": 41.849998,
+"lon": -87.650002
+},
+{
+"hostname": "chico",
+"lat": 39.7286,
+"lon": -121.835999
+},
+{
+"hostname": "chillicothe",
+"lat": 39.333099,
+"lon": -82.982399
+},
+{
+"hostname": "cincinnati",
+"lat": 39.1619,
+"lon": -84.456902
+},
+{
+"hostname": "clarksville",
+"lat": 36.529701,
+"lon": -87.359398
+},
+{
+"hostname": "cleveland",
+"lat": 41.499401,
+"lon": -81.695602
+},
+{
+"hostname": "clovis",
+"lat": 34.40691,
+"lon": -103.200073
+},
+{
+"hostname": "cnj",
+"lat": 40.363098,
+"lon": -74.6614
+},
+{
+"hostname": "collegestation",
+"lat": 30.6278,
+"lon": -96.334198
+},
+{
+"hostname": "columbia",
+"lat": 34.000599,
+"lon": -81.035004
+},
+{
+"hostname": "columbiamo",
+"lat": 38.951698,
+"lon": -92.3339
+},
+{
+"hostname": "columbus",
+"lat": 39.961102,
+"lon": -82.998901
+},
+{
+"hostname": "columbusga",
+"lat": 32.4608,
+"lon": -84.987801
+},
+{
+"hostname": "cookeville",
+"lat": 36.1628,
+"lon": -85.501602
+},
+{
+"hostname": "corpuschristi",
+"lat": 27.800301,
+"lon": -97.396103
+},
+{
+"hostname": "corvallis",
+"lat": 44.564701,
+"lon": -123.261002
+},
+{
+"hostname": "cosprings",
+"lat": 38.8339,
+"lon": -104.820999
+},
+{
+"hostname": "csd",
+"lat": 44.551334,
+"lon": -100.579834
+},
+{
+"hostname": "dallas",
+"lat": 32.783298,
+"lon": -96.800003
+},
+{
+"hostname": "danville",
+"lat": 36.5872,
+"lon": -79.404404
+},
+{
+"hostname": "dayton",
+"lat": 39.7589,
+"lon": -84.191704
+},
+{
+"hostname": "daytona",
+"lat": 29.2106,
+"lon": -81.023102
+},
+{
+"hostname": "decatur",
+"lat": 39.840302,
+"lon": -88.954697
+},
+{
+"hostname": "delaware",
+"lat": 39.145699,
+"lon": -75.483498
+},
+{
+"hostname": "delrio",
+"lat": 29.372601,
+"lon": -100.898438
+},
+{
+"hostname": "denver",
+"lat": 39.739201,
+"lon": -104.984001
+},
+{
+"hostname": "desmoines",
+"lat": 41.600601,
+"lon": -93.608902
+},
+{
+"hostname": "detroit",
+"lat": 42.331402,
+"lon": -83.045799
+},
+{
+"hostname": "dothan",
+"lat": 31.223101,
+"lon": -85.390602
+},
+{
+"hostname": "dubuque",
+"lat": 42.500599,
+"lon": -90.664398
+},
+{
+"hostname": "duluth",
+"lat": 46.783298,
+"lon": -92.1064
+},
+{
+"hostname": "eastco",
+"lat": 39.232254,
+"lon": -102.832031
+},
+{
+"hostname": "easternshore",
+"lat": 38.7701,
+"lon": -76.072098
+},
+{
+"hostname": "eastidaho",
+"lat": 43.4529,
+"lon": -112.782997
+},
+{
+"hostname": "eastky",
+"lat": 37.516998,
+"lon": -82.806
+},
+{
+"hostname": "eastnc",
+"lat": 35.584999,
+"lon": -77.372498
+},
+{
+"hostname": "eastoregon",
+"lat": 44.7565,
+"lon": -117.853996
+},
+{
+"hostname": "easttexas",
+"lat": 32.351101,
+"lon": -95.300797
+},
+{
+"hostname": "eauclaire",
+"lat": 44.811401,
+"lon": -91.498299
+},
+{
+"hostname": "elko",
+"lat": 40.832401,
+"lon": -115.763
+},
+{
+"hostname": "elmira",
+"lat": 42.089699,
+"lon": -76.808098
+},
+{
+"hostname": "elpaso",
+"lat": 31.7586,
+"lon": -106.486
+},
+{
+"hostname": "enid",
+"lat": 36.431702,
+"lon": -97.895302
+},
+{
+"hostname": "erie",
+"lat": 42.1292,
+"lon": -80.085297
+},
+{
+"hostname": "eugene",
+"lat": 44.0522,
+"lon": -123.085999
+},
+{
+"hostname": "evansville",
+"lat": 37.974701,
+"lon": -87.555801
+},
+{
+"hostname": "fairbanks",
+"lat": 64.837799,
+"lon": -147.716003
+},
+{
+"hostname": "fargo",
+"lat": 46.877201,
+"lon": -96.789398
+},
+{
+"hostname": "farmington",
+"lat": 36.7281,
+"lon": -108.218002
+},
+{
+"hostname": "fayar",
+"lat": 36.0625,
+"lon": -94.157204
+},
+{
+"hostname": "fayetteville",
+"lat": 35.052502,
+"lon": -78.878601
+},
+{
+"hostname": "fingerlakes",
+"lat": 42.516651,
+"lon": -76.816406
+},
+{
+"hostname": "flagstaff",
+"lat": 35.198101,
+"lon": -111.651001
+},
+{
+"hostname": "flint",
+"lat": 43.012501,
+"lon": -83.6875
+},
+{
+"hostname": "florencesc",
+"lat": 34.195301,
+"lon": -79.762802
+},
+{
+"hostname": "fortcollins",
+"lat": 40.5853,
+"lon": -105.084
+},
+{
+"hostname": "fortdodge",
+"lat": 42.497501,
+"lon": -94.167999
+},
+{
+"hostname": "fortmyers",
+"lat": 26.629999,
+"lon": -81.849998
+},
+{
+"hostname": "fortsmith",
+"lat": 35.385799,
+"lon": -94.3983
+},
+{
+"hostname": "fortwayne",
+"lat": 41.1306,
+"lon": -85.128899
+},
+{
+"hostname": "frederick",
+"lat": 39.414299,
+"lon": -77.4105
+},
+{
+"hostname": "fredericksburg",
+"lat": 38.3018,
+"lon": -77.470802
+},
+{
+"hostname": "fresno",
+"lat": 36.747799,
+"lon": -119.771004
+},
+{
+"hostname": "gadsden",
+"lat": 34.014198,
+"lon": -86.006699
+},
+{
+"hostname": "gainesville",
+"lat": 29.6514,
+"lon": -82.324997
+},
+{
+"hostname": "galveston",
+"lat": 29.281099,
+"lon": -94.825798
+},
+{
+"hostname": "glensfalls",
+"lat": 43.309502,
+"lon": -73.643997
+},
+{
+"hostname": "goldcountry",
+"lat": 38.732498,
+"lon": -120.801003
+},
+{
+"hostname": "grandforks",
+"lat": 47.925301,
+"lon": -97.032898
+},
+{
+"hostname": "grandisland",
+"lat": 40.924999,
+"lon": -98.341698
+},
+{
+"hostname": "grandrapids",
+"lat": 42.963299,
+"lon": -85.668098
+},
+{
+"hostname": "greatfalls",
+"lat": 47.500198,
+"lon": -111.301003
+},
+{
+"hostname": "greenbay",
+"lat": 44.519199,
+"lon": -88.019699
+},
+{
+"hostname": "greensboro",
+"lat": 36.072498,
+"lon": -79.792198
+},
+{
+"hostname": "greenville",
+"lat": 34.852501,
+"lon": -82.394203
+},
+{
+"hostname": "gulfport",
+"lat": 30.367201,
+"lon": -89.092796
+},
+{
+"hostname": "hanford",
+"lat": 36.3274,
+"lon": -119.646004
+},
+{
+"hostname": "harrisburg",
+"lat": 40.273602,
+"lon": -76.884697
+},
+{
+"hostname": "harrisonburg",
+"lat": 38.443298,
+"lon": -78.872803
+},
+{
+"hostname": "hartford",
+"lat": 41.763599,
+"lon": -72.6856
+},
+{
+"hostname": "hattiesburg",
+"lat": 31.3269,
+"lon": -89.290298
+},
+{
+"hostname": "helena",
+"lat": 46.592842,
+"lon": -112.022095
+},
+{
+"hostname": "hickory",
+"lat": 35.733101,
+"lon": -81.3414
+},
+{
+"hostname": "hiltonhead",
+"lat": 32.1917,
+"lon": -80.743301
+},
+{
+"hostname": "holland",
+"lat": 42.787498,
+"lon": -86.108902
+},
+{
+"hostname": "honolulu",
+"lat": 21.311399,
+"lon": -157.796005
+},
+{
+"hostname": "houma",
+"lat": 29.5958,
+"lon": -90.719498
+},
+{
+"hostname": "houston",
+"lat": 29.7631,
+"lon": -95.363098
+},
+{
+"hostname": "hudsonvalley",
+"lat": 41.576698,
+"lon": -73.803398
+},
+{
+"hostname": "humboldt",
+"lat": 40.747398,
+"lon": -123.987999
+},
+{
+"hostname": "huntington",
+"lat": 38.419201,
+"lon": -82.445297
+},
+{
+"hostname": "huntsville",
+"lat": 34.730301,
+"lon": -86.586098
+},
+{
+"hostname": "imperial",
+"lat": 32.9631,
+"lon": -115.487999
+},
+{
+"hostname": "indianapolis",
+"lat": 39.768299,
+"lon": -86.158096
+},
+{
+"hostname": "inlandempire",
+"lat": 34.052799,
+"lon": -117.627998
+},
+{
+"hostname": "iowacity",
+"lat": 41.661098,
+"lon": -91.529999
+},
+{
+"hostname": "ithaca",
+"lat": 42.440601,
+"lon": -76.496902
+},
+{
+"hostname": "jackson",
+"lat": 32.298599,
+"lon": -90.1847
+},
+{
+"hostname": "jacksontn",
+"lat": 35.614399,
+"lon": -88.813904
+},
+{
+"hostname": "jacksonville",
+"lat": 30.3319,
+"lon": -81.6558
+},
+{
+"hostname": "janesville",
+"lat": 42.6828,
+"lon": -89.0186
+},
+{
+"hostname": "jerseyshore",
+"lat": 40.2225,
+"lon": -74.012199
+},
+{
+"hostname": "jonesboro",
+"lat": 35.842201,
+"lon": -90.704201
+},
+{
+"hostname": "joplin",
+"lat": 37.084202,
+"lon": -94.5131
+},
+{
+"hostname": "juneau",
+"lat": 58.355629,
+"lon": -134.571533
+},
+{
+"hostname": "jxn",
+"lat": 42.2458,
+"lon": -84.401398
+},
+{
+"hostname": "kalamazoo",
+"lat": 42.291698,
+"lon": -85.587196
+},
+{
+"hostname": "kalispell",
+"lat": 48.195801,
+"lon": -114.313004
+},
+{
+"hostname": "kansascity",
+"lat": 39.099701,
+"lon": -94.5783
+},
+{
+"hostname": "kenai",
+"lat": 60.554401,
+"lon": -151.257996
+},
+{
+"hostname": "keys",
+"lat": 24.666901,
+"lon": -81.544197
+},
+{
+"hostname": "killeen",
+"lat": 31.116899,
+"lon": -97.727501
+},
+{
+"hostname": "kirksville",
+"lat": 40.194801,
+"lon": -92.583298
+},
+{
+"hostname": "klamath",
+"lat": 42.224899,
+"lon": -121.781998
+},
+{
+"hostname": "knoxville",
+"lat": 35.960602,
+"lon": -83.920799
+},
+{
+"hostname": "kokomo",
+"lat": 40.486401,
+"lon": -86.133598
+},
+{
+"hostname": "kpr",
+"lat": 46.211399,
+"lon": -119.136002
+},
+{
+"hostname": "ksu",
+"lat": 39.183601,
+"lon": -96.571404
+},
+{
+"hostname": "lacrosse",
+"lat": 43.801399,
+"lon": -91.239403
+},
+{
+"hostname": "lafayette",
+"lat": 30.2139,
+"lon": -92.029404
+},
+{
+"hostname": "lakecharles",
+"lat": 30.214701,
+"lon": -93.208603
+},
+{
+"hostname": "lakecity",
+"lat": 30.189199,
+"lon": -82.639503
+},
+{
+"hostname": "lakeland",
+"lat": 28.0392,
+"lon": -81.949997
+},
+{
+"hostname": "lancaster",
+"lat": 40.0378,
+"lon": -76.305801
+},
+{
+"hostname": "lansing",
+"lat": 42.732498,
+"lon": -84.555603
+},
+{
+"hostname": "laredo",
+"lat": 27.5061,
+"lon": -99.507202
+},
+{
+"hostname": "lasalle",
+"lat": 41.337639,
+"lon": -89.082642
+},
+{
+"hostname": "lascruces",
+"lat": 32.319698,
+"lon": -106.764999
+},
+{
+"hostname": "lasvegas",
+"lat": 36.174999,
+"lon": -115.136002
+},
+{
+"hostname": "lawrence",
+"lat": 38.971699,
+"lon": -95.235001
+},
+{
+"hostname": "lawton",
+"lat": 34.608601,
+"lon": -98.389999
+},
+{
+"hostname": "lewiston",
+"lat": 46.392399,
+"lon": -116.992996
+},
+{
+"hostname": "lexington",
+"lat": 37.988701,
+"lon": -84.477699
+},
+{
+"hostname": "limaohio",
+"lat": 40.7425,
+"lon": -84.105301
+},
+{
+"hostname": "lincoln",
+"lat": 40.799999,
+"lon": -96.666702
+},
+{
+"hostname": "littlerock",
+"lat": 34.746399,
+"lon": -92.289398
+},
+{
+"hostname": "logan",
+"lat": 41.7356,
+"lon": -111.834
+},
+{
+"hostname": "longisland",
+"lat": 40.822102,
+"lon": -73.149696
+},
+{
+"hostname": "losangeles",
+"lat": 34.0522,
+"lon": -118.242996
+},
+{
+"hostname": "louisville",
+"lat": 38.2542,
+"lon": -85.759399
+},
+{
+"hostname": "loz",
+"lat": 38.202499,
+"lon": -92.626297
+},
+{
+"hostname": "lubbock",
+"lat": 33.577801,
+"lon": -101.855003
+},
+{
+"hostname": "lynchburg",
+"lat": 37.403702,
+"lon": -79.170197
+},
+{
+"hostname": "macon",
+"lat": 32.840599,
+"lon": -83.6325
+},
+{
+"hostname": "madison",
+"lat": 43.073101,
+"lon": -89.4011
+},
+{
+"hostname": "maine",
+"lat": 44.693199,
+"lon": -69.334602
+},
+{
+"hostname": "mankato",
+"lat": 44.163601,
+"lon": -93.999199
+},
+{
+"hostname": "mansfield",
+"lat": 40.758301,
+"lon": -82.515602
+},
+{
+"hostname": "marshall",
+"lat": 44.447201,
+"lon": -95.787804
+},
+{
+"hostname": "martinsburg",
+"lat": 39.4561,
+"lon": -77.964203
+},
+{
+"hostname": "masoncity",
+"lat": 43.153599,
+"lon": -93.200996
+},
+{
+"hostname": "mattoon",
+"lat": 39.483101,
+"lon": -88.372803
+},
+{
+"hostname": "mcallen",
+"lat": 26.2031,
+"lon": -98.229698
+},
+{
+"hostname": "meadville",
+"lat": 41.641399,
+"lon": -80.151497
+},
+{
+"hostname": "medford",
+"lat": 42.326698,
+"lon": -122.874001
+},
+{
+"hostname": "memphis",
+"lat": 35.149399,
+"lon": -90.048897
+},
+{
+"hostname": "mendocino",
+"lat": 39.363098,
+"lon": -123.43
+},
+{
+"hostname": "merced",
+"lat": 37.3022,
+"lon": -120.482002
+},
+{
+"hostname": "meridian",
+"lat": 32.3643,
+"lon": -88.703697
+},
+{
+"hostname": "miami",
+"lat": 25.773899,
+"lon": -80.193901
+},
+{
+"hostname": "milwaukee",
+"lat": 43.038898,
+"lon": -87.906403
+},
+{
+"hostname": "minneapolis",
+"lat": 44.98,
+"lon": -93.263603
+},
+{
+"hostname": "missoula",
+"lat": 46.872101,
+"lon": -113.994003
+},
+{
+"hostname": "mobile",
+"lat": 30.694201,
+"lon": -88.043098
+},
+{
+"hostname": "modesto",
+"lat": 37.639198,
+"lon": -120.996002
+},
+{
+"hostname": "mohave",
+"lat": 35.285999,
+"lon": -114.083
+},
+{
+"hostname": "monroe",
+"lat": 32.5103,
+"lon": -92.095001
+},
+{
+"hostname": "monroemi",
+"lat": 41.916,
+"lon": -83.397697
+},
+{
+"hostname": "montana",
+"lat": 47.1,
+"lon": -104.7
+},
+{
+"hostname": "monterey",
+"lat": 36.6003,
+"lon": -121.893997
+},
+{
+"hostname": "montgomery",
+"lat": 32.366699,
+"lon": -86.300003
+},
+{
+"hostname": "morgantown",
+"lat": 39.629398,
+"lon": -79.9561
+},
+{
+"hostname": "moseslake",
+"lat": 47.1301,
+"lon": -119.278
+},
+{
+"hostname": "muncie",
+"lat": 40.193298,
+"lon": -85.386398
+},
+{
+"hostname": "muskegon",
+"lat": 43.2342,
+"lon": -86.248299
+},
+{
+"hostname": "myrtlebeach",
+"lat": 33.6889,
+"lon": -78.886902
+},
+{
+"hostname": "nacogdoches",
+"lat": 31.604271,
+"lon": -94.654083
+},
+{
+"hostname": "nashville",
+"lat": 36.165798,
+"lon": -86.784401
+},
+{
+"hostname": "natchez",
+"lat": 31.554199,
+"lon": -91.387497
+},
+{
+"hostname": "nd",
+"lat": 47.5,
+"lon": -100.5
+},
+{
+"hostname": "nesd",
+"lat": 45.3367,
+"lon": -97.646484
+},
+{
+"hostname": "newhaven",
+"lat": 41.308102,
+"lon": -72.928596
+},
+{
+"hostname": "newjersey",
+"lat": 40.91,
+"lon": -74.172997
+},
+{
+"hostname": "newlondon",
+"lat": 41.344101,
+"lon": -72.1036
+},
+{
+"hostname": "neworleans",
+"lat": 29.972799,
+"lon": -90.058998
+},
+{
+"hostname": "newyork",
+"lat": 40.714199,
+"lon": -74.006401
+},
+{
+"hostname": "nh",
+"lat": 43.654099,
+"lon": -71.564201
+},
+{
+"hostname": "nmi",
+"lat": 44.459301,
+"lon": -84.814499
+},
+{
+"hostname": "norfolk",
+"lat": 36.84,
+"lon": -76.269997
+},
+{
+"hostname": "northernwi",
+"lat": 45.638901,
+"lon": -89.412498
+},
+{
+"hostname": "northmiss",
+"lat": 34.358799,
+"lon": -89.5261
+},
+{
+"hostname": "northplatte",
+"lat": 41.123901,
+"lon": -100.764999
+},
+{
+"hostname": "nwct",
+"lat": 41.914501,
+"lon": -73.2761
+},
+{
+"hostname": "nwga",
+"lat": 34.5,
+"lon": -84.942001
+},
+{
+"hostname": "nwks",
+"lat": 39.095963,
+"lon": -100.50293
+},
+{
+"hostname": "ocala",
+"lat": 29.186899,
+"lon": -82.140297
+},
+{
+"hostname": "odessa",
+"lat": 31.8456,
+"lon": -102.366997
+},
+{
+"hostname": "ogden",
+"lat": 41.223099,
+"lon": -111.973
+},
+{
+"hostname": "okaloosa",
+"lat": 30.7621,
+"lon": -86.570503
+},
+{
+"hostname": "oklahomacity",
+"lat": 35.467499,
+"lon": -97.516098
+},
+{
+"hostname": "olympic",
+"lat": 47.798302,
+"lon": -123.617996
+},
+{
+"hostname": "omaha",
+"lat": 41.258598,
+"lon": -95.9375
+},
+{
+"hostname": "oneonta",
+"lat": 42.447781,
+"lon": -75.06958
+},
+{
+"hostname": "onslow",
+"lat": 34.758801,
+"lon": -77.4244
+},
+{
+"hostname": "orangecounty",
+"lat": 33.731499,
+"lon": -117.862
+},
+{
+"hostname": "oregoncoast",
+"lat": 43.396099,
+"lon": -124.167
+},
+{
+"hostname": "orlando",
+"lat": 28.538099,
+"lon": -81.379402
+},
+{
+"hostname": "ottumwa",
+"lat": 41.0075,
+"lon": -92.408798
+},
+{
+"hostname": "outerbanks",
+"lat": 36.031898,
+"lon": -75.676598
+},
+{
+"hostname": "owensboro",
+"lat": 37.7742,
+"lon": -87.113297
+},
+{
+"hostname": "palmsprings",
+"lat": 33.830299,
+"lon": -116.543999
+},
+{
+"hostname": "panamacity",
+"lat": 30.1586,
+"lon": -85.660301
+},
+{
+"hostname": "parkersburg",
+"lat": 39.266701,
+"lon": -81.561699
+},
+{
+"hostname": "pennstate",
+"lat": 40.793301,
+"lon": -77.860298
+},
+{
+"hostname": "pensacola",
+"lat": 30.421101,
+"lon": -87.216904
+},
+{
+"hostname": "peoria",
+"lat": 40.6936,
+"lon": -89.588898
+},
+{
+"hostname": "philadelphia",
+"lat": 39.952202,
+"lon": -75.1642
+},
+{
+"hostname": "phoenix",
+"lat": 33.448299,
+"lon": -112.072998
+},
+{
+"hostname": "pittsburgh",
+"lat": 40.440601,
+"lon": -79.996101
+},
+{
+"hostname": "plattsburgh",
+"lat": 44.699402,
+"lon": -73.4533
+},
+{
+"hostname": "poconos",
+"lat": 41.248611,
+"lon": -75.248611
+},
+{
+"hostname": "porthuron",
+"lat": 42.970798,
+"lon": -82.425003
+},
+{
+"hostname": "portland",
+"lat": 45.523602,
+"lon": -122.675003
+},
+{
+"hostname": "potsdam",
+"lat": 44.668652,
+"lon": -74.998169
+},
+{
+"hostname": "prescott",
+"lat": 34.540001,
+"lon": -112.468002
+},
+{
+"hostname": "providence",
+"lat": 41.8302,
+"lon": -71.409103
+},
+{
+"hostname": "provo",
+"lat": 40.233898,
+"lon": -111.657997
+},
+{
+"hostname": "pueblo",
+"lat": 38.254398,
+"lon": -104.609001
+},
+{
+"hostname": "pullman",
+"lat": 46.732498,
+"lon": -117.171997
+},
+{
+"hostname": "quadcities",
+"lat": 41.511299,
+"lon": -90.594398
+},
+{
+"hostname": "quincy",
+"lat": 39.935013,
+"lon": -91.389771
+},
+{
+"hostname": "racine",
+"lat": 42.584702,
+"lon": -87.821098
+},
+{
+"hostname": "raleigh",
+"lat": 35.7719,
+"lon": -78.638901
+},
+{
+"hostname": "rapidcity",
+"lat": 44.080502,
+"lon": -103.231003
+},
+{
+"hostname": "reading",
+"lat": 40.335602,
+"lon": -75.9272
+},
+{
+"hostname": "redding",
+"lat": 40.5867,
+"lon": -122.390999
+},
+{
+"hostname": "reno",
+"lat": 39.529701,
+"lon": -119.813004
+},
+{
+"hostname": "richmond",
+"lat": 37.5383,
+"lon": -77.461502
+},
+{
+"hostname": "richmondin",
+"lat": 39.829632,
+"lon": -84.890671
+},
+{
+"hostname": "rmn",
+"lat": 44.021702,
+"lon": -92.469704
+},
+{
+"hostname": "roanoke",
+"lat": 37.274101,
+"lon": -79.942001
+},
+{
+"hostname": "rochester",
+"lat": 43.154701,
+"lon": -77.615799
+},
+{
+"hostname": "rockford",
+"lat": 42.271099,
+"lon": -89.093903
+},
+{
+"hostname": "rockies",
+"lat": 39.1917,
+"lon": -106.824699
+},
+{
+"hostname": "roseburg",
+"lat": 43.216702,
+"lon": -123.341003
+},
+{
+"hostname": "roswell",
+"lat": 33.394199,
+"lon": -104.522003
+},
+{
+"hostname": "sacramento",
+"lat": 38.581699,
+"lon": -121.492996
+},
+{
+"hostname": "saginaw",
+"lat": 43.419399,
+"lon": -83.950798
+},
+{
+"hostname": "salem",
+"lat": 44.9431,
+"lon": -123.033997
+},
+{
+"hostname": "salina",
+"lat": 38.825001,
+"lon": -97.607498
+},
+{
+"hostname": "saltlakecity",
+"lat": 40.760799,
+"lon": -111.889999
+},
+{
+"hostname": "sanangelo",
+"lat": 31.452999,
+"lon": -100.452499
+},
+{
+"hostname": "sanantonio",
+"lat": 29.423901,
+"lon": -98.493301
+},
+{
+"hostname": "sandiego",
+"lat": 32.715302,
+"lon": -117.155998
+},
+{
+"hostname": "sandusky",
+"lat": 41.448898,
+"lon": -82.708099
+},
+{
+"hostname": "sanmarcos",
+"lat": 29.883101,
+"lon": -97.941101
+},
+{
+"hostname": "santabarbara",
+"lat": 34.420799,
+"lon": -119.696999
+},
+{
+"hostname": "santafe",
+"lat": 35.686901,
+"lon": -105.936996
+},
+{
+"hostname": "santamaria",
+"lat": 34.963799,
+"lon": -120.433296
+},
+{
+"hostname": "sarasota",
+"lat": 27.3361,
+"lon": -82.5308
+},
+{
+"hostname": "savannah",
+"lat": 32.050701,
+"lon": -81.103798
+},
+{
+"hostname": "scottsbluff",
+"lat": 41.8666,
+"lon": -103.667
+},
+{
+"hostname": "scranton",
+"lat": 41.408901,
+"lon": -75.662804
+},
+{
+"hostname": "sd",
+"lat": 44.296101,
+"lon": -99.236702
+},
+{
+"hostname": "seattle",
+"lat": 47.6064,
+"lon": -122.331001
+},
+{
+"hostname": "seks",
+"lat": 37.230328,
+"lon": -95.718384
+},
+{
+"hostname": "semo",
+"lat": 36.879601,
+"lon": -89.587997
+},
+{
+"hostname": "sfbay",
+"lat": 37.5,
+"lon": -122.25
+},
+{
+"hostname": "sheboygan",
+"lat": 43.750801,
+"lon": -87.714401
+},
+{
+"hostname": "shoals",
+"lat": 34.799702,
+"lon": -87.6772
+},
+{
+"hostname": "showlow",
+"lat": 34.2542,
+"lon": -110.029999
+},
+{
+"hostname": "shreveport",
+"lat": 32.468102,
+"lon": -93.771103
+},
+{
+"hostname": "sierravista",
+"lat": 31.554399,
+"lon": -110.303001
+},
+{
+"hostname": "siouxcity",
+"lat": 42.5,
+"lon": -96.400002
+},
+{
+"hostname": "siouxfalls",
+"lat": 43.549999,
+"lon": -96.700302
+},
+{
+"hostname": "siskiyou",
+"lat": 41.208199,
+"lon": -122.272003
+},
+{
+"hostname": "skagit",
+"lat": 48.384499,
+"lon": -122.357002
+},
+{
+"hostname": "slo",
+"lat": 35.282799,
+"lon": -120.658997
+},
+{
+"hostname": "smd",
+"lat": 38.534199,
+"lon": -76.783401
+},
+{
+"hostname": "southbend",
+"lat": 41.6833,
+"lon": -86.25
+},
+{
+"hostname": "southcoast",
+"lat": 41.6385,
+"lon": -71.048599
+},
+{
+"hostname": "southjersey",
+"lat": 39.480301,
+"lon": -75.013901
+},
+{
+"hostname": "spacecoast",
+"lat": 28.613501,
+"lon": -80.693199
+},
+{
+"hostname": "spokane",
+"lat": 47.658901,
+"lon": -117.425003
+},
+{
+"hostname": "springfield",
+"lat": 37.215302,
+"lon": -93.298103
+},
+{
+"hostname": "springfieldil",
+"lat": 39.801701,
+"lon": -89.6436
+},
+{
+"hostname": "statesboro",
+"lat": 32.448799,
+"lon": -81.783203
+},
+{
+"hostname": "staugustine",
+"lat": 29.8944,
+"lon": -81.314697
+},
+{
+"hostname": "stcloud",
+"lat": 45.560799,
+"lon": -94.162201
+},
+{
+"hostname": "stgeorge",
+"lat": 37.095299,
+"lon": -113.578003
+},
+{
+"hostname": "stillwater",
+"lat": 36.115601,
+"lon": -97.058098
+},
+{
+"hostname": "stjoseph",
+"lat": 39.7686,
+"lon": -94.846603
+},
+{
+"hostname": "stlouis",
+"lat": 38.627701,
+"lon": -90.242798
+},
+{
+"hostname": "stockton",
+"lat": 37.957802,
+"lon": -121.290001
+},
+{
+"hostname": "susanville",
+"lat": 40.416302,
+"lon": -120.653
+},
+{
+"hostname": "swks",
+"lat": 37.04641,
+"lon": -100.931396
+},
+{
+"hostname": "swmi",
+"lat": 41.984001,
+"lon": -86.066902
+},
+{
+"hostname": "swv",
+"lat": 37.779499,
+"lon": -81.183296
+},
+{
+"hostname": "swva",
+"lat": 36.892803,
+"lon": -82.084351
+},
+{
+"hostname": "syracuse",
+"lat": 43.0481,
+"lon": -76.147797
+},
+{
+"hostname": "tallahassee",
+"lat": 30.438101,
+"lon": -84.2808
+},
+{
+"hostname": "tampa",
+"lat": 28,
+"lon": -82.449997
+},
+{
+"hostname": "terrehaute",
+"lat": 39.466702,
+"lon": -87.413902
+},
+{
+"hostname": "texarkana",
+"lat": 33.424999,
+"lon": -94.047501
+},
+{
+"hostname": "texoma",
+"lat": 33.832001,
+"lon": -96.571098
+},
+{
+"hostname": "thumb",
+"lat": 43.417019,
+"lon": -83.092346
+},
+{
+"hostname": "tippecanoe",
+"lat": 40.416698,
+"lon": -86.875298
+},
+{
+"hostname": "toledo",
+"lat": 41.663898,
+"lon": -83.555298
+},
+{
+"hostname": "topeka",
+"lat": 39.048302,
+"lon": -95.677803
+},
+{
+"hostname": "treasure",
+"lat": 27.230801,
+"lon": -80.226303
+},
+{
+"hostname": "tricities",
+"lat": 36.4174,
+"lon": -82.440697
+},
+{
+"hostname": "tucson",
+"lat": 32.221699,
+"lon": -110.926003
+},
+{
+"hostname": "tulsa",
+"lat": 36.1539,
+"lon": -95.9925
+},
+{
+"hostname": "tuscaloosa",
+"lat": 33.209702,
+"lon": -87.569199
+},
+{
+"hostname": "tuscarawas",
+"lat": 40.4501,
+"lon": -81.466499
+},
+{
+"hostname": "twinfalls",
+"lat": 42.563099,
+"lon": -114.459999
+},
+{
+"hostname": "twintiers",
+"lat": 41.875301,
+"lon": -78.875
+},
+{
+"hostname": "up",
+"lat": 46.550098,
+"lon": -87.408302
+},
+{
+"hostname": "utica",
+"lat": 43.1008,
+"lon": -75.233101
+},
+{
+"hostname": "valdosta",
+"lat": 30.8325,
+"lon": -83.278603
+},
+{
+"hostname": "ventura",
+"lat": 34.277,
+"lon": -119.044998
+},
+{
+"hostname": "vermont",
+"lat": 44.461201,
+"lon": -73.193703
+},
+{
+"hostname": "victoriatx",
+"lat": 28.805,
+"lon": -97.003304
+},
+{
+"hostname": "visalia",
+"lat": 36.330299,
+"lon": -119.291
+},
+{
+"hostname": "waco",
+"lat": 31.5492,
+"lon": -97.1464
+},
+{
+"hostname": "washingtondc",
+"lat": 38.889999,
+"lon": -77.029999
+},
+{
+"hostname": "waterloo",
+"lat": 42.4925,
+"lon": -92.345802
+},
+{
+"hostname": "watertown",
+"lat": 43.974701,
+"lon": -75.911102
+},
+{
+"hostname": "wausau",
+"lat": 44.959202,
+"lon": -89.629997
+},
+{
+"hostname": "wenatchee",
+"lat": 47.423599,
+"lon": -120.308998
+},
+{
+"hostname": "westernmass",
+"lat": 42.349998,
+"lon": -73
+},
+{
+"hostname": "westky",
+"lat": 37.081474,
+"lon": -88.077393
+},
+{
+"hostname": "westmd",
+"lat": 39.651699,
+"lon": -78.7658
+},
+{
+"hostname": "westslope",
+"lat": 39.0704,
+"lon": -108.552002
+},
+{
+"hostname": "wheeling",
+"lat": 40.0639,
+"lon": -80.7211
+},
+{
+"hostname": "wichita",
+"lat": 37.6922,
+"lon": -97.337196
+},
+{
+"hostname": "wichitafalls",
+"lat": 33.913601,
+"lon": -98.493103
+},
+{
+"hostname": "williamsport",
+"lat": 41.2411,
+"lon": -77.001404
+},
+{
+"hostname": "wilmington",
+"lat": 34.225601,
+"lon": -77.945
+},
+{
+"hostname": "winchester",
+"lat": 39.178299,
+"lon": -78.166603
+},
+{
+"hostname": "winstonsalem",
+"lat": 36.099701,
+"lon": -80.2444
+},
+{
+"hostname": "worcester",
+"lat": 42.262501,
+"lon": -71.802803
+},
+{
+"hostname": "wv",
+"lat": 38.709999,
+"lon": -80.660004
+},
+{
+"hostname": "wyoming",
+"lat": 43.004002,
+"lon": -108.153999
+},
+{
+"hostname": "yakima",
+"lat": 46.6022,
+"lon": -120.504997
+},
+{
+"hostname": "york",
+"lat": 39.962502,
+"lon": -76.728104
+},
+{
+"hostname": "youngstown",
+"lat": 41.099701,
+"lon": -80.649696
+},
+{
+"hostname": "yubasutter",
+"lat": 39.144402,
+"lon": -121.647003
+},
+{
+"hostname": "yuma",
+"lat": 32.7253,
+"lon": -114.624001
+},
+{
+"hostname": "zanesville",
+"lat": 39.9403,
+"lon": -82.013199
+}
+]
