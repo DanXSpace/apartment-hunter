@@ -29,7 +29,8 @@
 - User-facing text is plain language, and exact copy is pinned in the tasks below. Code uses the glossary's terms (Search, Listing, Run, Seeding run, Alert, Health alert, Source, Criteria).
 - Tests (from `CODING_STANDARDS.md`): test at the seam, hand-written fakes in the test file, no mocking libraries, injected clocks, no real threads or sleeps, never touch Zillow, Craigslist or Discord. pytest already blocks non-loopback sockets, with a 10 s timeout.
 - Each task ends green on `uv run ruff check`, `uv run mypy` and `uv run pytest -q`.
-- Every commit message ends with the trailer `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Never push, tag remotely, open a PR or change GitHub issues without the owner's go-ahead.
+- Every commit message ends with the trailer `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. The owner approved pushing `discord-bot` itself (2026-11-17); pushing anything else, tagging remotely, opening a PR or changing GitHub issues waits for their go-ahead.
+- Change dependencies with `uvx uv@0.12.19 add …` / `remove …`, the uv the Dockerfile pins, so `uv.lock` stays at revision 3 for the image's `uv sync --frozen`; other uv versions rewrite the whole file. `uvx uv@0.12.19 lock --check` passes after each change.
 
 ## Review Focus
 
@@ -39,23 +40,34 @@
 4. **The alert channel is deleted, or the bot loses permission, during a Run.** The Run stops, nothing unsent is marked seen, the Search is paused with a reason, and its creator is told. Tests: Task 8 `test_channel_gone_stops_the_run_without_marking_seen`, Task 10 `test_channel_gone_pauses_the_search_and_tells_its_creator`.
 5. **Place names with apostrophes, commas and spaces** ("Coeur d'Alene, ID") are URL-encoded in lookups. Test: Task 7 `test_suggestions_url_encodes_the_text`.
 
+## Running in a cloud session
+
+The owner set this plan up to run in a Claude Code cloud session on `discord-bot` (2026-11-17). A cloud machine reaches PyPI, GitHub and Docker Hub but not Zillow, Craigslist or Discord, so the steps that needed the owner's home connection were done from it beforehand and are checked off: Task 1 Steps 1–4 and the real-page captures in Tasks 6, 7 and 13. In a cloud session:
+
+- **Skills:** the superpowers skills named at the top are installed on the owner's computer, not in cloud sessions. Without them, work through each task's checkbox steps in order.
+- **Pushing:** commit to `discord-bot` and push it after every task, so a reclaimed machine loses nothing.
+- **Feasibility (Task 1 Steps 5–7):** the session starts and reads the cloud run through GitHub Actions; the home run, if it's needed, is the owner's.
+- **Owner checks:** the Discord test-server checks in Tasks 11, 12 and 13 need the bot running where it can reach Discord, with the owner's token, so they happen together at the end on the owner's computer (Task 15 Step 6b).
+- **Docker (Task 14 Step 4):** Docker is installed; start the daemon if `docker info` says it isn't running. If the build stops at `apt-get` (Debian's mirrors are outside the cloud's network allowlist), note that the PR's CI docker job covers it.
+- **GitHub (Task 15 Step 7):** use `gh api` (REST) or the built-in GitHub tools; the session's GitHub proxy refuses `gh pr` and `gh issue` (GraphQL), tag pushes and branch deletions.
+
 ---
 
 ### Task 1: Feasibility check (no browser, home and cloud)
 
 **Files:**
-- Create: `scripts/feasibility_check.py`
+- Create: `scripts/feasibility_check.py`, `.github/workflows/feasibility.yml` (Step 5)
 - Modify: `pyproject.toml`, `uv.lock` (add curl-cffi)
 
 **Interfaces:**
 - Produces: `uv run python scripts/feasibility_check.py [--rounds N] [--gap-minutes M] [--out PATH]`; exit 0 when every Source passes. Throwaway diagnostic (kept for re-checking a host), so no unit tests.
 
-- [ ] **Step 1: Add curl-cffi**
+- [x] **Step 1: Add curl-cffi** (done 2026-11-17)
 
-Run: `uv add 'curl-cffi>=0.16.3'`
-Expected: `pyproject.toml` lists `curl-cffi>=0.16.3`; `uv.lock` updated.
+Run: `uvx uv@0.12.19 add 'curl-cffi>=0.16.3'`
+Expected: `pyproject.toml` lists `curl-cffi>=0.16.3`; `uv.lock` gains two lines (Scrapling already pulled curl-cffi in).
 
-- [ ] **Step 2: Write `scripts/feasibility_check.py`**
+- [x] **Step 2: Write `scripts/feasibility_check.py`** (done 2026-11-17)
 
 Standalone (no imports from `apartment_hunter`). For each round, GET these six URLs with `curl_cffi.requests.get(url, impersonate="chrome", timeout=25)`, with a random 3–8 s pause between requests:
 
@@ -72,55 +84,72 @@ Per request, append a CSV row `time,source,check,status,blocked,listings` to `--
 
 Rounds: `--rounds` (default 16), separated by `--gap-minutes` (default 15) × `random.uniform(0.8, 1.2)`. At the end, print one line per Source: `zillow PASS` / `zillow FAIL (n failed rounds, longest streak k)`. A Source **passes** unless any check failed in two consecutive rounds (the spec's "an occasional failure that clears on the next try is fine"). Exit 0 when both pass, else 1.
 
-- [ ] **Step 3: Smoke-run one round**
+- [x] **Step 3: Smoke-run one round** (done 2026-11-17 from the owner's home connection: all six HTTP 200; listings 41, 41, 41 on Zillow and 6, 319, 76 on Craigslist; both PASS)
 
 Run: `uv run python scripts/feasibility_check.py --rounds 1 --gap-minutes 0`
 Expected: six rows with status 200 and listings > 0 (for `chicago-2bd` around 41), then `zillow PASS` and `craigslist PASS`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit** (done 2026-11-17)
 
 ```bash
 git add scripts/feasibility_check.py pyproject.toml uv.lock
 git commit -m "Feasibility check: poll Zillow and Craigslist without a browser"
 ```
 
-- [ ] **Step 5: Start the home run in the background (about 4 hours)**
+- [ ] **Step 5: Cloud run on GitHub Actions, only with the owner's go-ahead**
 
-Run (background): `mkdir -p data && uv run python scripts/feasibility_check.py --rounds 16 > data/feasibility-home.log 2>&1`
-Tasks 2–5 don't depend on its result and proceed meanwhile.
-
-- [ ] **Step 6: Cloud run, only with the owner's go-ahead**
-
-Ask the owner: "OK to push a throwaway branch `feasibility-check` to your GitHub so a GitHub Actions runner (a cloud server) runs the check 3 times, 15 minutes apart? I'll delete the branch afterwards." If no, record "cloud: not tested" and skip to Step 7. If yes, on a new branch `feasibility-check` cut from `discord-bot`, add `.github/workflows/feasibility.yml`:
+Ask the owner: "OK to run a GitHub Actions job on your repository for about 4 hours? A GitHub server (a cloud computer) checks Zillow and Craigslist 16 times, 15 minutes apart, to learn whether the bot can live in the cloud. It's free on a public repository." If no, record "cloud: not tested" and go to Step 6. If yes, add `.github/workflows/feasibility.yml` to `discord-bot`, commit it and push `discord-bot`. That push starts it; later pushes don't unless they change this file (once merged, it can also be started from the Actions tab):
 
 ```yaml
 name: Feasibility check
 on:
   push:
-    branches: [feasibility-check]
+    branches: [discord-bot]
+    paths: [.github/workflows/feasibility.yml]
+  workflow_dispatch:
 jobs:
-  check:
+  smoke:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v10.3.3
         with:
           python-version: "3.12"
-      - run: uv run python scripts/feasibility_check.py --rounds 3 --gap-minutes 15 --out feasibility.csv
-      - uses: actions/upload-artifact@v4
-        if: always()
+      - shell: bash
+        run: uv run --no-project --with 'curl-cffi>=0.16.3' python scripts/feasibility_check.py --rounds 1 --gap-minutes 0 | tee feasibility.log
+      - if: always()
+        run: grep -E '^ +(zillow|craigslist) ' feasibility.log | sed -E 's/^ +/::notice title=smoke::/'
+  sustained:
+    needs: smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          python-version: "3.12"
+      - shell: bash
+        run: uv run --no-project --with 'curl-cffi>=0.16.3' python scripts/feasibility_check.py --rounds 16 --gap-minutes 15 --out feasibility.csv | tee feasibility.log
+      - if: always()
+        run: grep -E '^(zillow|craigslist) ' feasibility.log | sed -E 's/^/::notice title=sustained::/'
+      - if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: feasibility
           path: feasibility.csv
 ```
 
-Commit it there, `git push -u origin feasibility-check`, follow it with `gh run watch`, read the summary lines with `gh run view --log`, then `git push origin --delete feasibility-check`, switch back to `discord-bot`, and delete the local branch.
+`shell: bash` turns on `pipefail`, so a `FAIL` (exit 1) fails the job despite the `tee`. Read the results through the REST API, which works from a cloud session too: the run with `gh api "repos/DanXSpace/apartment-hunter/actions/workflows/feasibility.yml/runs?branch=discord-bot" --jq '.workflow_runs[0] | {id, status, conclusion}'`, its jobs with `gh api repos/DanXSpace/apartment-hunter/actions/runs/<run id>/jobs --jq '.jobs[] | {name, id, status, conclusion}'`, and a finished job's lines with `gh api repos/DanXSpace/apartment-hunter/check-runs/<job id>/annotations --jq '.[].message'`. The smoke job's six lines arrive within minutes; if Zillow is already blocked there (HTTP 403/429 or `blocked`), tell the owner right away so Step 6 can start early. Tasks 2–5 don't depend on the result and proceed meanwhile.
+
+- [ ] **Step 6: Home run, only if the cloud run didn't pass or wasn't allowed (about 4 hours)**
+
+The same 16 rounds from the owner's home connection. On the owner's computer, run it in the background with `mkdir -p data && uv run python scripts/feasibility_check.py --rounds 16 > data/feasibility-home.log 2>&1` and read the last two lines when it ends. A cloud session can't reach Zillow or Craigslist, so it asks the owner to run this on their computer, kept awake, from a checkout of `discord-bot` (`git clone -b discord-bot https://github.com/DanXSpace/apartment-hunter.git`), and to paste back the last two lines.
 
 - [ ] **Step 7: Gate (do this before starting Task 6)**
 
-Read the last lines of `data/feasibility-home.log` and the cloud result. Record both in the task notes; Task 15 uses them for the README's hosting section.
-- Home `zillow FAIL` → **stop**: report the results to the owner and revisit the Source mix together (spec, Hosting). Don't start Task 6.
-- Home passes and cloud passes → hosting: cloud. Home passes and cloud fails or untested → hosting: the owner's place.
+Record the results in the task notes; Task 15 uses them for the README's hosting section.
+- Cloud run shows `zillow PASS` and `craigslist PASS` → hosting: cloud. A cloud server that keeps answering under sustained polling also settles the home question, so Step 6 isn't needed.
+- Otherwise the home run decides. Home `zillow FAIL` → **stop**: report the results to the owner and revisit the Source mix together (spec, Hosting); don't start Task 6. Home `zillow PASS` → hosting: the owner's place (note any Craigslist failure for Task 13 and the README).
 
 ---
 
@@ -135,7 +164,7 @@ Read the last lines of `data/feasibility-home.log` and the cloud result. Record 
 
 - [ ] **Step 1: Tag v0.2 locally**
 
-Run: `git tag v0.2-apartments-com main`
+Run: `git tag v0.2-apartments-com 5fddee608c85fa8ec7676a97280d24f74a3a8236` (the tip of `main`, which is v0.2; a fresh clone may have no local `main`)
 Expected: `git tag` lists it (pushing it waits for the owner; see Task 15).
 
 - [ ] **Step 2: Delete the old application layer**
@@ -154,7 +183,7 @@ Run: `git rm -r src/apartment_hunter/cli.py src/apartment_hunter/desktop.py src/
 
 - [ ] **Step 4: Trim dependencies**
 
-Run: `uv remove playwright fastapi jinja2 uvicorn platformdirs requests scrapling && uv add 'scrapling>=0.5.1' && uv remove --dev httpx`
+Run: `uvx uv@0.12.19 remove playwright fastapi jinja2 uvicorn platformdirs requests scrapling && uvx uv@0.12.19 add 'scrapling>=0.5.1' && uvx uv@0.12.19 remove --dev httpx`
 Then delete the two `[project.scripts]` entries from `pyproject.toml` (Task 11 adds the bot's) and set `description = "A Discord bot that posts new rental listings from Zillow and Craigslist"`. Keep the `playwright` entry in ruff's banned-api list.
 
 - [ ] **Step 5: Verify**
@@ -372,7 +401,7 @@ git commit -m "Store keeps Searches per Discord server, with per-Source health"
 
 ### Task 6: Zillow Source
 
-**Gate first:** Task 1 Step 7 must show home `zillow PASS`. If it isn't done yet, wait for it; if it failed, stop.
+**Gate first:** Task 1 Step 7 must have settled hosting (a cloud pass, or home `zillow PASS`). If it hasn't yet, wait for it; if home Zillow failed, stop.
 
 **Files:**
 - Create: `src/apartment_hunter/sources/zillow.py`
@@ -386,7 +415,7 @@ git commit -m "Store keeps Searches per Discord server, with per-Source health"
 - Pinned errors: HTTP 403/429, or a body containing `px-captcha` or `Press & Hold` → `BlockedError("Zillow is blocking requests from this computer right now (bot protection). This usually clears up on its own.")`; any other non-200 → `ScrapeError(f"Zillow answered with an error (HTTP {status}).")`; no `__NEXT_DATA__` or no `cat1` → `ScrapeError("Zillow's page layout changed, so listings couldn't be read. The bot needs an update.")`.
 - `matches_home_type`: ANY → all; APARTMENT_CONDO → APARTMENT, CONDO, BUILDING; HOUSE → SINGLE_FAMILY; TOWNHOME → TOWNHOUSE. `fetch` drops cards that don't match, as a safety net (Zillow shows buildings even in a houses-only search).
 
-- [ ] **Step 1: Save a real page as a fixture** (needs the network; pytest itself stays offline). This keeps only the parts the parser reads, with 5 real cards:
+- [x] **Step 1: Save a real page as a fixture** (done 2026-11-17 from a home connection: 4 buildings and 1 single unit, total 15,830, `nextUrl` present). To refresh it, re-run this from a computer that reaches Zillow; pytest itself stays offline. It keeps only the parts the parser reads, with 5 real cards:
 
 ```bash
 mkdir -p tests/fixtures/zillow && uv run python - <<'EOF'
@@ -531,7 +560,7 @@ git commit -m "Add the Zillow Source: criteria to search URL, newest-first page 
 - Produces: `ACCEPTED_KINDS = {"city": 6, "zipcode": 7, "neighborhood": 8}` (Zillow region types; 6 and 8 verified, 7 by Zillow's numbering); `@dataclass(frozen=True) class Place: display: str; kind: str; region_id: int; lat: float; lon: float`; `@dataclass(frozen=True) class CraigslistSite: hostname: str; lat: float; lon: float`; `class AreaNotFound(Exception)`; `suggestions_url(text: str) -> str`; `parse_suggestions(body: str) -> list[Place]`; `load_craigslist_sites() -> list[CraigslistSite]`; `nearest_craigslist_site(lat: float, lon: float, sites: Sequence[CraigslistSite]) -> str`; `class Areas(Protocol): def suggest(self, text: str) -> list[str]; def resolve(self, text: str) -> Area`; `class AreaLookup(http: HttpClient, sites: Sequence[CraigslistSite] | None = None, clock: Callable[[], float] = time.monotonic, min_gap_seconds: float = 2.0)` implementing `Areas`
 - Pinned: `suggestions_url(t) = "https://www.zillowstatic.com/autocomplete/v3/suggestions?q=" + urllib.parse.quote(t, safe="")`. The response is `{"results": [{"display", "resultType", "metaData": {"regionId", "regionType", "lat", "lng"}}]}`; only `resultType == "Region"` with `regionType` in `ACCEPTED_KINDS` becomes a `Place`. Radius: 10 miles for a city, 2 for a neighborhood or ZIP code. Nearest site by great-circle distance. `suggest`: strip; fewer than 3 characters → `[]`; cached text → cached displays; fewer than `min_gap_seconds` since the last lookup request → `[]`; otherwise request, cache, and return the displays. `resolve`: cached or fresh lookup (never throttled); the place whose display equals the text case-insensitively, else the first; none → `AreaNotFound(f"I couldn't find a place called \"{text}\". Try a city, neighborhood or ZIP code, like \"Chicago, IL\" or \"60614\".")`.
 
-- [ ] **Step 1: Generate the bundled site list**
+- [x] **Step 1: Generate the bundled site list** (done 2026-11-17: 413 US sites, `chicago` as expected)
 
 Run: `curl -s https://reference.craigslist.org/Areas | uv run python -c "import json,sys; a=json.load(sys.stdin); json.dump(sorted(({'hostname': x['Hostname'], 'lat': x['Latitude'], 'lon': x['Longitude']} for x in a if x['Country'] == 'US'), key=lambda s: s['hostname']), sys.stdout, indent=0)" > src/apartment_hunter/sources/craigslist_sites.json`
 Expected: a JSON list of about 400 US sites, including `{"hostname": "chicago", "lat": 41.849998, "lon": -87.650002}`.
@@ -937,7 +966,7 @@ git commit -m "SearchService: create, seed on add, per-server statuses and isola
 - Pinned wiring (`main`): `load_dotenv()`; settings (`SettingsError` → log, return 2); logging at `log_level`; `DataDir(settings.data_dir)`; hold `lock()` (`AlreadyRunning` → log, return 2) and attach `log_handler()`. `Store(data.database)`. Runs use `PoliteHttpClient(CurlHttpClient())`; area lookups use their own `CurlHttpClient(timeout=2.5)` (never the polite one: autocomplete must answer within 3 s). Sources `{"zillow": ZillowSource(run_http)}`. Create in this order: runner (`notifier_for = lambda s: ChannelNotifier(bridge, s.channel_id)`), scheduler (`run = lambda sid: service.run(sid)`, `interval_minutes`), service (`direct_message = lambda uid, text: bridge.direct_message(uid, text)`, `owner_id`), `client = build_client(...)` with `on_first_ready` = `service.load(); scheduler.start_in_background()`, then `bridge = DiscordBridge(client)`. The lambdas look `bridge` and `service` up when called, after all of them exist. `client.run(token, log_handler=None)`; finally `scheduler.shutdown(timeout=30)` and `store.close()`. `--help` prints usage and exits 0 (CI uses it).
 - Pinned commands: group `search` ("Find new rentals and get them posted here"). `new`: `area` (str, required, autocomplete → `service.suggest_areas` via `asyncio.to_thread`), `max_price` / `min_price` (`app_commands.Range[int, 1, 100000]`), `min_beds` (`Range[int, 0, 10]`, "0 = studio"), `min_baths` (`Range[float, 0, 10]`), `home_type` choices (Any / Apartment or condo / House / Townhome → the `HomeType` values), `pets` choices (No requirement / Dogs / Cats), `name` (str, max 60). `list` and `help` take no options. Flow for `new`: compute `can_post` from `interaction.channel.permissions_for(guild.me)` (view_channel, send_messages, embed_links); `await interaction.response.defer(thinking=True)`; `service.create` via `to_thread`; on `SearchError`, delete the original response and send `str(e)` as an ephemeral follow-up; else edit to `checking_reply`, `await asyncio.to_thread(pending.wait, 840)`, and edit to `created_reply`. If that returned None, keep awaiting `pending.wait(None)` in a background task and post `created_reply` in the channel when it resolves. `list` and `help` reply ephemerally. Commands sync in `setup_hook`: with `dev_guild_id`, `tree.copy_global_to(guild=...)` and `sync(guild=...)`; else a global `sync()`. `on_ready` logs `invite_url(client.application_id)` and calls `on_first_ready` once. Intents: `discord.Intents.none()` with `guilds = True`.
 
-- [ ] **Step 1: Add discord.py** — `uv add 'discord.py>=2.7.1'`; add the `[project.scripts]` entry.
+- [ ] **Step 1: Add discord.py** — `uvx uv@0.12.19 add 'discord.py>=2.7.1'`; add the `[project.scripts]` entry.
 
 - [ ] **Step 2: Write the failing tests**
 
@@ -1005,7 +1034,7 @@ def test_invite_url():
 - [ ] **Step 3: Run to verify they fail** — `uv run pytest tests/test_settings.py tests/test_replies.py -q` → FAIL
 - [ ] **Step 4: Implement** `settings.py`, the `text.py` additions, `replies.py`, `posting.py`, `app.py` and `main.py` to the pinned interfaces. Write `help_reply` in plain language: what the bot does, the commands, the limits (per server, total, interval), and what Healthy / Running / Paused / Needs attention / Not run yet mean. Write `.env.example` with every variable, commented, and `DISCORD_TOKEN=` left empty.
 - [ ] **Step 5: Verify** — `uv run pytest -q && uv run ruff check && uv run mypy && uv run apartment-hunter --help` → PASS, and usage printed.
-- [ ] **Step 6: Owner end-to-end check (manual, needs the owner)**
+- [ ] **Step 6: Owner end-to-end check (manual, needs the owner; a cloud session leaves it for Task 15 Step 6b)**
 
 Ask the owner to: (1) create an application in the Discord Developer Portal, add a bot, turn on **Public Bot**, and copy the token **into `.env` themselves** (never into chat); (2) set `DEV_GUILD_ID` to a test server they own and `INTERVAL_MINUTES=10`. Then run `uv run apartment-hunter` (background), have the owner open the invite URL from the log and add the bot to the test server, and have them run `/search new area: <their city> max_price: …`. Expected: "Checking Zillow for …", then "✅ Watching … N places match right now…"; `/search list` shows it Healthy; `/search help` reads well; within about an hour, any new Zillow listing arrives as an embed with a photo. Note anything off before continuing.
 
@@ -1126,7 +1155,7 @@ Add to `tests/test_replies.py`: `edited_reply(SEARCH, True)` mentions "fresh sta
 - [ ] **Step 2: Run to verify they fail** — `uv run pytest tests/test_service.py tests/test_replies.py -q` → FAIL
 - [ ] **Step 3: Implement** the service methods, the owner rule, the replies and the bot commands and events.
 - [ ] **Step 4: Verify** — `uv run pytest -q && uv run ruff check && uv run mypy` → PASS
-- [ ] **Step 5: Owner check (manual)** — in the test server: `/search edit` the price (the reply says it's taking a fresh look), `/search pause` → `/search list` shows Paused, `/search resume`, `/search check` twice (the second is refused with the minutes), `/search delete` with the button. Delete the test channel of a live search and confirm the creator gets the DM.
+- [ ] **Step 5: Owner check (manual; a cloud session leaves it for Task 15 Step 6b)** — in the test server: `/search edit` the price (the reply says it's taking a fresh look), `/search pause` → `/search list` shows Paused, `/search resume`, `/search check` twice (the second is refused with the minutes), `/search delete` with the button. Delete the test channel of a live search and confirm the creator gets the DM.
 - [ ] **Step 6: Commit**
 
 ```bash
@@ -1149,7 +1178,7 @@ git commit -m "Edit, pause, resume, delete and check Searches; owner alerts and 
 - Pinned URL: `f"https://{area.craigslist_site}.craigslist.org/search/apa?"` + `urlencode` of, in order: `sort=date`, `lat`, `lon`, `search_distance` (= radius), then only those set: `min_price`, `max_price`, `min_bedrooms`, `min_bathrooms` (numbers without a trailing `.0`), `pets_dog=1` / `pets_cat=1`, and one `housing_type` per code.
 - Pinned parsing: `ol.cl-static-search-results` missing → `ScrapeError("Craigslist's page layout changed, so listings couldn't be read. The bot needs an update.")`; each `li.cl-static-search-result` (skip `li.cl-static-hub-links`): url = the `a` href, listing_id = the URL's last path segment, name = `.title` text, address = `.location` text (stripped), price from `.price` ("$2,100" → 2100; missing → None), beds, baths and image None. HTTP 403/429 → `BlockedError("Craigslist is blocking requests from this computer right now. This usually clears up on its own.")`; other non-200 → `ScrapeError(f"Craigslist answered with an error (HTTP {status}).")`. The results page carries no beds or photos, so Craigslist alerts show beds as "—" and have no image. The bedroom filter is applied by Craigslist itself.
 
-- [ ] **Step 1: Save a real page as a fixture** (needs the network; keeps 5 real results):
+- [x] **Step 1: Save a real page as a fixture** (done 2026-11-17 from a home connection). To refresh it, re-run this from a computer that reaches Craigslist; it keeps 5 real results:
 
 ```bash
 mkdir -p tests/fixtures/craigslist && uv run python - <<'EOF'
@@ -1222,7 +1251,7 @@ def test_parses_a_saved_real_page(fixture_html):
 - [ ] **Step 2: Run to verify they fail** — `uv run pytest tests/test_craigslist.py -q` → FAIL
 - [ ] **Step 3: Implement** `craigslist.py`. Register it in `main.py` (`{"zillow": ..., "craigslist": CraigslistSource(run_http)}`, `source_keys=("zillow", "craigslist")`) and add the `sources` option to `new` and `edit` (choices: "Zillow and Craigslist" → both, "Zillow only", "Craigslist only").
 - [ ] **Step 4: Verify** — `uv run pytest -q && uv run ruff check && uv run mypy` → PASS
-- [ ] **Step 5: Owner check (manual)** — `/search new` in the test server now says "Checking Zillow and Craigslist…" and counts both; a Craigslist alert arrives without a photo, with beds "—".
+- [ ] **Step 5: Owner check (manual; a cloud session leaves it for Task 15 Step 6b)** — `/search new` in the test server now says "Checking Zillow and Craigslist…" and counts both; a Craigslist alert arrives without a photo, with beds "—".
 - [ ] **Step 6: Commit**
 
 ```bash
@@ -1246,7 +1275,7 @@ git commit -m "Add the Craigslist Source"
 - [ ] **Step 4: Verify locally**
 
 Run: `docker build -t apartment-hunter:dev . && docker run --rm apartment-hunter:dev --help`
-Expected: the build succeeds and usage is printed. If the Docker daemon isn't running, ask the owner to start Docker Desktop, or note that CI covers it.
+Expected: the build succeeds and usage is printed. If the Docker daemon isn't running, ask the owner to start Docker Desktop, or note that CI covers it. In a cloud session, see Running in a cloud session (Docker).
 
 - [ ] **Step 5: Commit**
 
@@ -1282,4 +1311,6 @@ git add README.md GLOSSARY.md TODO.md CODING_STANDARDS.md
 git commit -m "Docs for the Discord bot"
 ```
 
-- [ ] **Step 7: Handoff (ask the owner; do none of these without a yes)** — push `discord-bot` and open a PR; push the `v0.2-apartments-com` tag; post the design as a GitHub issue (the repo keeps specs there) and close #1 and #3–#21 with a pointer to it.
+- [ ] **Step 6b (cloud sessions): Owner checks** — the manual checks from Task 11 Step 6, Task 12 Step 5 and Task 13 Step 5, which a cloud session leaves for now. Ask the owner to set up the Discord application and `.env` as in Task 11 Step 6, then, on their computer, to update their checkout of `discord-bot` (or clone it) and run `uv run apartment-hunter`. Go through the three checks with them, fix what they find (one commit per fix, pushed), and only then move to Step 7.
+
+- [ ] **Step 7: Handoff (ask the owner; do none of these without a yes)** — open a PR from `discord-bot` to `main`; push the `v0.2-apartments-com` tag; post the design as a GitHub issue (the repo keeps specs there) and close #1 and #3–#21 with a pointer to it. In a cloud session, do these through REST (`gh pr`, `gh issue` and tag pushes are refused there): the PR with the built-in GitHub tools or `gh api repos/DanXSpace/apartment-hunter/pulls -f head=discord-bot -f base=main -f title=… -f body=…`; the tag with `gh api repos/DanXSpace/apartment-hunter/git/refs -f ref=refs/tags/v0.2-apartments-com -f sha=5fddee608c85fa8ec7676a97280d24f74a3a8236`; the issue with `gh api repos/DanXSpace/apartment-hunter/issues -f title=… -f body=…`; and each closing with a comment (`gh api repos/DanXSpace/apartment-hunter/issues/<n>/comments -f body=…`) followed by `gh api -X PATCH repos/DanXSpace/apartment-hunter/issues/<n> -f state=closed`.
