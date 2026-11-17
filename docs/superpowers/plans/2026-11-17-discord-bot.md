@@ -1,6 +1,6 @@
 # Apartment Hunter Discord Bot Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** the owner uses mattpocock-skills, not superpowers: build each task test-first with the `tdd` skill and review it with `code-review` (standards and spec) before starting the next. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the browser-based apartments.com watcher with a Discord bot that people add to their own server, set criteria with `/search`, and get new Zillow and Craigslist listings posted, with no browser anywhere.
 
@@ -11,6 +11,24 @@
 **Spec:** `docs/superpowers/specs/2026-11-17-discord-bot-design.md`
 
 **Order note:** the old paths are retired first (Task 2), on the `discord-bot` branch. `main` keeps v0.2 until the branch merges, so nobody using `main` loses a working tool, and no task has to keep the old CLI compiling while shared modules are rewritten.
+
+## Progress
+
+Paused on 2026-11-17 after Task 3, at the owner's request. So far the build ran on the owner's computer, subagent-driven: a fresh implementer per task following the `tdd` skill, then a two-axis `code-review` (standards, spec) and fixes before the next task. Commits use the owner's GitHub no-reply address; in a fresh clone, set it first with `git config user.name DanXSpace` and `git config user.email 17147033+DanXSpace@users.noreply.github.com`.
+
+- **Task 1:** Steps 1–4 done. Step 5: cloud run not tested (the owner said no). Step 6: a home run started on 2026-11-17 on the owner's computer, writing `data/feasibility-home.log` there (local only); if that log is gone or incomplete, run it again. Step 7's gate is still open and comes before Task 6.
+- **Task 2:** done and reviewed (`079f181`).
+- **Task 3:** built (`ec1cdfc`); its review hasn't run yet. Resume with `code-review` at fixed point `079f181`, then Task 4.
+
+Decisions made along the way:
+- The re-lock in Task 2 moved `w3lib` to 2.6.0, which brings in `frostwork` 0.2.2 (Zyte's, from the Scrapy project); accepted rather than pinning `w3lib`.
+- `v0.2-apartments-com` stays a lightweight tag, matching Task 15's REST call.
+- Task 2's test dataclass `S` and the `Schedulable` protocol stay as they are; Task 9 replaces both.
+- Task 3 has one test beyond the four it names, for its "no trailing `.0`" rule.
+
+Carry forward:
+- Tasks 10 and 11: `summarize` shows any number it's given, so a minimum of 0 reads "from $0" or "0+ ba" (only `min_beds == 0` reads "studio+"). The commands pass None where they mean "no minimum".
+- Task 15: `CODING_STANDARDS.md` still cites `tests/test_runner.py` (deleted) and apartments.com; `GLOSSARY.md`'s Alert, Blocked, Needs attention and Data directory entries still describe the webhook, apartments.com, the desktop app and the browser profile; the `Listing` docstring says "Call for Rent".
 
 ## Global Constraints
 
@@ -44,7 +62,7 @@
 
 The owner set this plan up to run in a Claude Code cloud session on `discord-bot` (2026-11-17). A cloud machine reaches PyPI, GitHub and Docker Hub but not Zillow, Craigslist or Discord, so the steps that needed the owner's home connection were done from it beforehand and are checked off: Task 1 Steps 1–4 and the real-page captures in Tasks 6, 7 and 13. In a cloud session:
 
-- **Skills:** the superpowers skills named at the top are installed on the owner's computer, not in cloud sessions. Without them, work through each task's checkbox steps in order.
+- **Skills:** the mattpocock-skills named at the top are installed on the owner's computer, not in cloud sessions. Without them, work through each task's checkbox steps in order.
 - **Pushing:** commit to `discord-bot` and push it after every task, so a reclaimed machine loses nothing.
 - **Feasibility (Task 1 Steps 5–7):** the session starts and reads the cloud run through GitHub Actions; the home run, if it's needed, is the owner's.
 - **Owner checks:** the Discord test-server checks in Tasks 11, 12 and 13 need the bot running where it can reach Discord, with the owner's token, so they happen together at the end on the owner's computer (Task 15 Step 6b).
@@ -162,16 +180,16 @@ Record the results in the task notes; Task 15 uses them for the README's hosting
 **Interfaces:**
 - Produces: `DataDir(root)` with only `database`, `log_file`, `lock_file`, `log_handler()`, `lock()`; `notifiers.discord.build_embed` (unchanged for now); `models.Listing` (unchanged for now). `ScrapeResult` and `DiscordNotifier` are gone. The Dockerfile and its CI job go stale until Task 14 (CI only runs on `main` and on PRs, and no PR opens before then).
 
-- [ ] **Step 1: Tag v0.2 locally**
+- [x] **Step 1: Tag v0.2 locally**
 
 Run: `git tag v0.2-apartments-com 5fddee608c85fa8ec7676a97280d24f74a3a8236` (the tip of `main`, which is v0.2; a fresh clone may have no local `main`)
 Expected: `git tag` lists it (pushing it waits for the owner; see Task 15).
 
-- [ ] **Step 2: Delete the old application layer**
+- [x] **Step 2: Delete the old application layer**
 
 Run: `git rm -r src/apartment_hunter/cli.py src/apartment_hunter/desktop.py src/apartment_hunter/config.py src/apartment_hunter/fetchers.py src/apartment_hunter/runner.py src/apartment_hunter/web src/apartment_hunter/scrapers tests/test_cli.py tests/test_web.py tests/test_config.py tests/test_apartments_com.py tests/test_runner.py tests/fixtures/apartments_com config.example.toml .claude/skills/run-app`
 
-- [ ] **Step 3: Trim what stays**
+- [x] **Step 3: Trim what stays**
 
 - `notifiers/discord.py`: delete `DiscordNotifier` and its imports (`requests`, `time`, `Callable` if unused); keep `build_embed` and its helpers.
 - `tests/test_discord.py`: delete `Resp`, `_patch`, `test_retries_on_rate_limit`, `test_client_error_raises_without_retry`, `test_gives_up_after_max_attempts`, `test_webhook_check` and the `requests` import.
@@ -181,17 +199,17 @@ Run: `git rm -r src/apartment_hunter/cli.py src/apartment_hunter/desktop.py src/
 - `scheduler.py`: replace `from apartment_hunter.config import Search` with a local `class Schedulable(Protocol): name: str; interval_minutes: float` used in its signatures (Task 9 rewrites the scheduler).
 - `tests/test_scheduler.py`: replace the `config.Search` import with a local `@dataclass(frozen=True) class S: name: str; interval_minutes: float` and `A = S("A", 15)`, `B = S("B", 30)`.
 
-- [ ] **Step 4: Trim dependencies**
+- [x] **Step 4: Trim dependencies**
 
 Run: `uvx uv@0.12.19 remove playwright fastapi jinja2 uvicorn platformdirs requests scrapling && uvx uv@0.12.19 add 'scrapling>=0.5.1' && uvx uv@0.12.19 remove --dev httpx`
 Then delete the two `[project.scripts]` entries from `pyproject.toml` (Task 11 adds the bot's) and set `description = "A Discord bot that posts new rental listings from Zillow and Craigslist"`. Keep the `playwright` entry in ruff's banned-api list.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run: `uv sync && uv run ruff check && uv run mypy && uv run pytest -q`
 Expected: all pass (the appdata, embed and scheduler tests remain).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -217,7 +235,7 @@ git commit -m "Retire the v0.2 CLI, desktop app, apartments.com scraper and brow
 - Produces (in `models.py`): `Listing` gains a first field `source: str` (a Source key: `"zillow"`, `"craigslist"`); `@dataclass(frozen=True) class Search: id: str; server_id: int; channel_id: int; created_by: int; name: str; criteria: Criteria; sources: tuple[str, ...]; created_at: datetime; paused: bool = False; attention: str | None = None`
 - Produces (in `tests/conftest.py`): `AT = datetime(2026, 11, 5, 12, 0, tzinfo=UTC)`; `CHICAGO = Area("Chicago, IL", "city", 17426, 6, 41.8781, -87.6298, "chicago", 10)`; `LINCOLN_PARK = Area("Lincoln Park, Chicago, IL", "neighborhood", 269590, 8, 41.9237, -87.6505, "chicago", 2)`; `make_listing(listing_id="abc", price=2000, source="zillow", **overrides)` (url `https://www.zillow.com/homedetails/{listing_id}/`, `scraped_at=AT`); `make_search(search_id="s1", server_id=1, name="Chicago", sources=("zillow",), **overrides)` (channel 10, created_by 99, `Criteria(CHICAGO)`, `created_at=AT`)
 
-- [ ] **Step 1: Write the failing tests** (`tests/test_criteria.py`)
+- [x] **Step 1: Write the failing tests** (`tests/test_criteria.py`)
 
 ```python
 def test_summary_lists_criteria_in_a_fixed_order():
@@ -241,21 +259,21 @@ def test_criteria_round_trip_through_json():
     assert criteria_from_json(criteria_to_json(c)) == c
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `uv run pytest tests/test_criteria.py -q`
 Expected: FAIL (`ModuleNotFoundError: apartment_hunter.criteria`).
 
-- [ ] **Step 3: Implement `criteria.py`, extend `models.py`, update `conftest.py`**
+- [x] **Step 3: Implement `criteria.py`, extend `models.py`, update `conftest.py`**
 
 Summary order: area · beds · baths · price · home type · pets, joined with `" · "`. Beds: `"studio+"` for 0, else `"{n}+ bd"`; baths `"{n}+ ba"` (no trailing `.0`); price `"$a–$b"` / `"up to $b"` / `"from $a"` with thousands separators; home type labels `apartments & condos` / `houses` / `townhomes`; pets `dogs` / `cats`; `ANY` and `NONE` add nothing. JSON: `dataclasses.asdict` plus enum values; the reverse rebuilds `Area` and enums.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run: `uv run pytest -q && uv run ruff check && uv run mypy`
 Expected: PASS (the embed tests still pass with `make_listing`'s new `source`).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/apartment_hunter/criteria.py src/apartment_hunter/models.py tests/conftest.py tests/test_criteria.py
