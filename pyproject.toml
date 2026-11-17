@@ -1,29 +1,18 @@
 [project]
 name = "apartment-hunter"
 version = "0.2.0"
-description = "Watches apartments.com searches and sends Discord alerts for new listings and price drops"
+description = "A Discord bot that posts new rental listings from Zillow and Craigslist"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
-    "scrapling[fetchers]>=0.5.1",
-    "playwright>=1.58.0",
     "python-dotenv",
-    "requests",
-    "platformdirs>=4.14.5",
-    "fastapi>=0.162.0",
-    "jinja2>=3.1.6",
-    "uvicorn>=0.54.0",
     "curl-cffi>=0.16.3",
+    "scrapling>=0.5.1",
 ]
-
-[project.scripts]
-apartment-hunter = "apartment_hunter.cli:main"
-apartment-hunter-app = "apartment_hunter.desktop:main"
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28.1",
     "mypy>=2.4.1",
     "pytest>=8",
     "pytest-socket>=0.8.1",
@@ -41,14 +30,9 @@ packages = ["src/apartment_hunter"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # Tests are offline (see CODING_STANDARDS.md): a connection to anything but loopback fails at once
-# instead of hanging. Loopback stays open for the event loop's self-pipe behind FastAPI's TestClient
-# (a TCP socketpair on Windows).
+# instead of hanging. Loopback stays open for asyncio's self-pipe (a TCP socketpair on Windows).
 addopts = "--disable-socket --allow-hosts=127.0.0.1"
 timeout = 10
-filterwarnings = [
-    # anyio's pytest plugin (pulled in by scrapling) uses a pytest alias slated for removal
-    "ignore:_pytest.python.CallSpec2 has been renamed",
-]
 
 [tool.mypy]
 python_version = "3.12"
@@ -69,4 +53,4 @@ select = ["E", "F", "W", "I", "B", "UP", "SLF001", "TID251"]
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "unittest.mock".msg = "Tests use hand-written fakes (see CODING_STANDARDS.md), not a mocking library."
 "pytest_mock".msg = "Tests use hand-written fakes (see CODING_STANDARDS.md), not a mocking library."
-"playwright".msg = "Tests never launch a browser; use a fake Fetcher or Scraper."
+"playwright".msg = "No browser anywhere: the bot uses plain HTTP, and tests use hand-written fakes."

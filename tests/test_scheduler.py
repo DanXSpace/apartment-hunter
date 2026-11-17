@@ -1,10 +1,18 @@
+from dataclasses import dataclass
+
 import pytest
 
-from apartment_hunter.config import Search
 from apartment_hunter.scheduler import Scheduler, next_delay_seconds
 
-A = Search("A", "https://www.apartments.com/a/", 15, "https://discord/webhook")
-B = Search("B", "https://www.apartments.com/b/", 30, "https://discord/webhook")
+
+@dataclass(frozen=True)
+class S:
+    name: str
+    interval_minutes: float
+
+
+A = S("A", 15)
+B = S("B", 30)
 
 
 class FakeClock:

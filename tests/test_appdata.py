@@ -28,16 +28,6 @@ def test_stale_lock_file_from_crashed_process_is_taken_over(tmp_path):
         pass
 
 
-def test_app_data_dir_is_the_per_user_data_location(app_data_root):
-    data = DataDir.app_data()
-    assert data.root == app_data_root
-    assert data.config == app_data_root / "config.toml"
-    assert data.database == app_data_root / "apartment_hunter.db"
-    assert data.browser_profile == app_data_root / "browser-profile"
-    assert data.log_file == app_data_root / "logs" / "apartment-hunter.log"
-    assert data.port_file == app_data_root / "port"
-
-
 def test_log_handler_writes_to_the_log_file_in_the_data_dir(tmp_path):
     data = DataDir(tmp_path)
     logger = logging.getLogger("test_appdata.log_handler")

@@ -5,8 +5,7 @@ import random
 import threading
 import time
 from collections.abc import Callable
-
-from apartment_hunter.config import Search
+from typing import Protocol
 
 log = logging.getLogger(__name__)
 
@@ -15,6 +14,13 @@ JITTER = 0.2
 
 def next_delay_seconds(interval_minutes: float) -> float:
     return interval_minutes * 60 * random.uniform(1 - JITTER, 1 + JITTER)
+
+
+class Schedulable(Protocol):
+    """A search as the scheduler sees it: a name and how often to run it."""
+
+    name: str
+    interval_minutes: float
 
 
 class Scheduler:
@@ -31,8 +37,8 @@ class Scheduler:
 
     def __init__(
         self,
-        run: Callable[[Search], None],
-        searches: list[Search],
+        run: Callable[[Schedulable], None],
+        searches: list[Schedulable],
         clock: Callable[[], float] = time.monotonic,
         next_delay: Callable[[float], float] = next_delay_seconds,
     ):

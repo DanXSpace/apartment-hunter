@@ -22,10 +22,3 @@ class Listing:
     baths_max: float | None
     image_url: str | None
     scraped_at: datetime
-
-
-@dataclass(frozen=True)
-class ScrapeResult:
-    listings: list[Listing]
-    pages_fetched: int
-    hit_page_cap: bool
