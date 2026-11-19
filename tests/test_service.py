@@ -356,6 +356,24 @@ def test_owner_hears_once_when_a_source_fails_everywhere_and_once_on_recovery(en
     assert env.dms[-1] == (7, "✅ Zillow is working again.")
 
 
+def test_owner_hears_of_recovery_only_once_a_search_that_ran_the_source_succeeds(env):
+    env.service.owner_id = 7
+    env.zillow.pages = [ScrapeError("blocked.")] * 8 + [[]]
+    env.service.create(1, 10, 99, NewSearch("Chicago, IL", name="A"), can_post=True)
+    env.service.create(2, 20, 98, NewSearch("Chicago, IL", name="B"), can_post=True)
+    for _ in range(3):
+        env.scheduler.run_pending()
+        env.clock.advance(15)
+    owner_dms = [text for user, text in env.dms if user == 7]
+    assert len(owner_dms) == 1 and owner_dms[0].startswith("⚠️ Zillow has failed in every search")
+    late = make_search("late", server_id=3, name="Not run yet", created_at=AT + timedelta(days=1))
+    env.store.add_search(late)  # a Search that hasn't run Zillow yet
+    env.scheduler.run_pending()  # A and B fail again
+    assert [text for user, text in env.dms if user == 7] == owner_dms
+    env.service.run(late.id)  # its first Run works
+    assert env.dms[-1] == (7, "✅ Zillow is working again.")
+
+
 def test_resume_after_the_channel_came_back_clears_the_reason(env):
     env.zillow.pages = [[], [make_listing("a")], [make_listing("a")]]
     search, _ = env.service.create(1, 10, 99, NewSearch("Chicago, IL", name="Home"), can_post=True)
@@ -395,3 +413,65 @@ def test_a_criteria_edit_keeps_a_chosen_name_or_one_whose_new_summary_is_taken(e
     clash, pending = env.service.edit(1, "Chicago, IL · up to $2,400", SearchChanges(max_price=1500))
     assert clash.name == "Chicago, IL · up to $2,400" and pending is not None
     assert env.store.find_search(1, clash.name).criteria.max_price == 1500
+
+
+class MidRunSource(FakeSource):
+    """A FakeSource that does `during_fetch` (once) while a Run is reading it, as the bot's thread
+    might while the scheduler's thread is mid-Run."""
+
+    def __init__(self, key):
+        super().__init__(key)
+        self.during_fetch = None
+
+    def fetch(self, criteria, page):
+        if self.during_fetch is not None:
+            act, self.during_fetch = self.during_fetch, None
+            act()
+        return super().fetch(criteria, page)
+
+
+def use_mid_run_source(env) -> MidRunSource:
+    zillow = MidRunSource("zillow")
+    env.service.runner = SearchRunner({"zillow": zillow}, env.store, lambda search: env.notifiers[10])
+    return zillow
+
+
+def test_an_edit_during_a_seeding_run_still_gets_its_own_quiet_seeding_run(env):
+    zillow = use_mid_run_source(env)
+    zillow.pages = [[make_listing("a")], [make_listing("a"), make_listing("b"), make_listing("c")],
+                    [make_listing("a"), make_listing("b"), make_listing("c"), make_listing("d")]]
+    _, created = env.service.create(1, 10, 99, NewSearch("Chicago, IL", name="Home"), can_post=True)
+    edits = []
+    zillow.during_fetch = lambda: edits.append(env.service.edit(1, "Home", SearchChanges(max_price=1800)))
+    assert env.scheduler.run_pending() == 2  # the interrupted Run, then the edit's Seeding run
+    _, edited = edits[0]
+    assert edited.wait(0).results[0].seeded and created.wait(0).results[0].seeded
+    assert env.notifiers[10].listings == []
+    env.clock.advance(15)
+    env.scheduler.run_pending()
+    assert env.notifiers[10].listings == [("d", None)]
+
+
+def test_a_delete_during_a_run_sends_no_alerts_and_keeps_nothing(env):
+    zillow = use_mid_run_source(env)
+    zillow.pages = [[make_listing("a")], [make_listing("a"), make_listing("b")]]
+    search, _ = env.service.create(1, 10, 99, NewSearch("Chicago, IL", name="Home"), can_post=True)
+    env.scheduler.run_pending()
+    zillow.during_fetch = lambda: env.service.delete(1, "Home")
+    env.clock.advance(15)
+    env.scheduler.run_pending()
+    assert env.notifiers[10].listings == [] and env.notifiers[10].texts == []
+    assert env.service.statuses(1) == []
+    assert env.store.listing_count(search.id) == 0  # the service shows nothing of a deleted Search
+
+
+def test_a_rename_during_a_run_lets_the_run_finish(env):
+    zillow = use_mid_run_source(env)
+    zillow.pages = [[make_listing("a")], [make_listing("a"), make_listing("b")]]
+    env.service.create(1, 10, 99, NewSearch("Chicago, IL", name="Home"), can_post=True)
+    env.scheduler.run_pending()
+    zillow.during_fetch = lambda: env.service.edit(1, "Home", SearchChanges(name="Flat"))
+    _, pending = env.service.check(1, "Home")
+    env.scheduler.run_pending()
+    assert pending.wait(0).alerts_sent == 1
+    assert env.notifiers[10].listings == [("b", None)]

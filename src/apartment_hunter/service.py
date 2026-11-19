@@ -179,6 +179,10 @@ class SearchService:
         except Exception:  # tell whoever waits now; the Scheduler carries on with other Searches
             log.exception("[%s] Unexpected error in a Run", search.name)
             outcome = RunOutcome(search_id, (), 0, error=RUN_FAILED)
+        if outcome.superseded:
+            # Edited or deleted mid-Run: the edit queued a fresh Run, which the waiters now wait for;
+            # a delete has already let them go.
+            return
         if outcome.channel_gone:
             self._pause_for_missing_channel(search_id)
         if self.owner_id is not None:
@@ -204,7 +208,9 @@ class SearchService:
                 f"The host may be blocked, or {name} changed its pages.",
             )
             self.store.set_owner_alert_sent(source, True)
-        elif alerted and any(h.consecutive_failures == 0 for h in health):
+        # Recovered only when a Search has read the Source successfully since: a successful Run always
+        # leaves it seeded, while a Search that hasn't run it yet is unseeded with no failures.
+        elif alerted and any(h.seeded and h.consecutive_failures == 0 for h in health):
             self.direct_message(owner_id, f"✅ {name} is working again.")
             self.store.set_owner_alert_sent(source, False)
 
