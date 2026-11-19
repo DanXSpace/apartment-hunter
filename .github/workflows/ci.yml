@@ -27,5 +27,5 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: docker build -t apartment-hunter:ci .
-      - name: CLI starts inside the image
+      - name: Bot starts inside the image
         run: docker run --rm apartment-hunter:ci --help
