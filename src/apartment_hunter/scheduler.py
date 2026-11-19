@@ -5,7 +5,6 @@ import random
 import threading
 import time
 from collections.abc import Callable
-from typing import Protocol
 
 log = logging.getLogger(__name__)
 
@@ -16,19 +15,12 @@ def next_delay_seconds(interval_minutes: float) -> float:
     return interval_minutes * 60 * random.uniform(1 - JITTER, 1 + JITTER)
 
 
-class Schedulable(Protocol):
-    """A search as the scheduler sees it: a name and how often to run it."""
-
-    name: str
-    interval_minutes: float
-
-
 class Scheduler:
-    """Runs searches one at a time (never in parallel), each on its own jittered interval.
+    """Runs Searches by id, one at a time (never in parallel), each every interval with jitter.
 
-    Every search is due as soon as the scheduler starts. Paused searches are skipped by the
-    schedule; `run_now` queues a search ahead of the schedule (even a paused one). Nothing runs
-    while stopped; queued work waits for `start`.
+    A Search is due `first_delay` seconds after it is added, then every jittered interval. Paused
+    Searches are skipped by the schedule; `run_now` queues a Search ahead of the schedule (even a
+    paused one). Nothing runs while stopped; queued work waits for `start`.
 
     `run_pending` does all due work synchronously in the caller's thread, which is what tests
     drive. `serve_forever` (blocking) and `start_in_background` (thread) loop over it, sleeping
@@ -37,17 +29,16 @@ class Scheduler:
 
     def __init__(
         self,
-        run: Callable[[Schedulable], None],
-        searches: list[Schedulable],
+        run: Callable[[str], None],
+        interval_minutes: float = 15,
         clock: Callable[[], float] = time.monotonic,
         next_delay: Callable[[float], float] = next_delay_seconds,
     ):
         self._run = run
+        self._interval_minutes = interval_minutes
         self._clock = clock
         self._next_delay = next_delay
-        self._searches = {s.name: s for s in searches}
-        now = clock()
-        self._next_run = {s.name: now for s in searches}
+        self._next_run: dict[str, float] = {}
         self._running = False
         self._paused: set[str] = set()
         self._queue: list[str] = []
@@ -71,68 +62,88 @@ class Scheduler:
             self._running = False
             self._cond.notify_all()
 
+    def add(self, search_id: str, first_delay: float = 0.0, paused: bool = False) -> None:
+        """Schedule a Search to first come due `first_delay` seconds from now."""
+        with self._cond:
+            self._next_run[search_id] = self._clock() + first_delay
+            if paused:
+                self._paused.add(search_id)
+            else:
+                self._paused.discard(search_id)
+            self._cond.notify_all()
+
+    def remove(self, search_id: str) -> None:
+        """Forget a Search, queued or not. A Run of it already in progress finishes."""
+        with self._cond:
+            self._next_run.pop(search_id, None)
+            self._paused.discard(search_id)
+            if search_id in self._queue:
+                self._queue.remove(search_id)
+            self._cond.notify_all()
+
     @property
     def running(self) -> bool:
         return self._running
 
-    def pause(self, name: str) -> None:
+    def pause(self, search_id: str) -> None:
         with self._cond:
-            self._paused.add(name)
+            self._paused.add(search_id)
             self._cond.notify_all()
 
-    def resume(self, name: str) -> None:
+    def resume(self, search_id: str) -> None:
         with self._cond:
-            self._paused.discard(name)
+            self._paused.discard(search_id)
             self._cond.notify_all()
 
-    def is_paused(self, name: str) -> bool:
-        return name in self._paused
+    def is_paused(self, search_id: str) -> bool:
+        return search_id in self._paused
 
     # -- reading state (safe from any thread) --
 
     @property
     def current(self) -> str | None:
-        """The search being run right now, if any."""
+        """The id of the Search being run right now, if any."""
         return self._current
 
-    def next_run(self, name: str) -> float:
-        """When the search is next due on its schedule, in the scheduler's clock."""
+    def next_run(self, search_id: str) -> float:
+        """When the Search is next due on its schedule, in the scheduler's clock."""
         with self._cond:
-            return self._next_run[name]
+            return self._next_run[search_id]
 
-    def run_now(self, name: str) -> None:
-        """Queue a search to run next, even if paused. It still runs one at a time."""
-        if name not in self._searches:
-            raise KeyError(name)
+    def run_now(self, search_id: str) -> None:
+        """Queue a Search to run next, even if paused. It still runs one at a time."""
         with self._cond:
-            if name not in self._queue:
-                self._queue.append(name)
+            if search_id not in self._next_run:
+                raise KeyError(search_id)
+            if search_id not in self._queue:
+                self._queue.append(search_id)
             self._cond.notify_all()
 
     # -- doing the work --
 
     def run_pending(self) -> int:
-        """Synchronously run every search that is due now, in order. Returns how many ran."""
+        """Synchronously run every Search that is due now, in order. Returns how many ran."""
         ran = 0
         with self._run_lock:
             while True:
                 with self._cond:
-                    if not self._running or (name := self._take_next_due()) is None:
+                    if not self._running or (search_id := self._take_next_due()) is None:
                         return ran
-                    search = self._searches[name]
-                self._current = name
+                self._current = search_id
                 try:
-                    self._run(search)
+                    self._run(search_id)
                 except Exception:  # never let one bad run kill the scheduler
-                    log.exception("[%s] Unexpected error", name)
+                    log.exception("[%s] Unexpected error", search_id)
                 finally:
                     self._current = None
                 ran += 1
                 with self._cond:
-                    delay = self._next_delay(search.interval_minutes)
-                    self._next_run[name] = self._clock() + delay
+                    if search_id not in self._next_run:  # removed while it ran
+                        continue
+                    delay = self._next_delay(self._interval_minutes)
+                    self._next_run[search_id] = self._clock() + delay
                 if self._serving:
-                    log.info("[%s] Next run in %.0f min", name, delay / 60)
+                    log.info("[%s] Next run in %.0f min", search_id, delay / 60)
 
     def serve_forever(self) -> None:
         """Run due work as it comes due, in the calling thread, until `shutdown`."""
@@ -179,7 +190,7 @@ class Scheduler:
         return min(due, key=self._next_run.__getitem__) if due else None
 
     def _seconds_until_next_due(self) -> float | None:
-        """None means nothing can come due on its own (stopped, or every search paused)."""
+        """None means nothing can come due on its own (stopped, or every Search paused)."""
         if not self._running:
             return None
         if self._queue:
