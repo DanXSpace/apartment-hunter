@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import random
 import threading
 from collections.abc import Callable
@@ -17,6 +18,9 @@ from apartment_hunter.scheduler import Scheduler
 from apartment_hunter.sources import SOURCE_NAMES, ScrapeError
 from apartment_hunter.storage import DuplicateName, Store
 
+log = logging.getLogger(__name__)
+
+RUN_FAILED = "Something went wrong checking this Search. The owner can find details in the log."
 NO_PERMISSION = (
     "I can't post in this channel. Give me the View Channel, Send Messages and Embed Links "
     "permissions here, or run the command in another channel."
@@ -130,7 +134,11 @@ class SearchService:
         search = self.store.get_search(search_id)
         if search is None:
             return
-        outcome = self.runner.run(search)
+        try:
+            outcome = self.runner.run(search)
+        except Exception:  # tell whoever waits now; the Scheduler carries on with other Searches
+            log.exception("[%s] Unexpected error in a Run", search.name)
+            outcome = RunOutcome(search_id, (), 0, error=RUN_FAILED)
         if outcome.channel_gone:
             self._pause_for_missing_channel(search_id)
         with self._pending_lock:
@@ -149,6 +157,18 @@ class SearchService:
             f'I paused your search "{search.name}": {CHANNEL_GONE} '
             "Fix the channel and use /search resume, or delete it with /search delete.",
         )
+
+    def _check_sources(self, sources: tuple[str, ...] | None) -> tuple[str, ...]:
+        """The Sources to use (None means all the bot has); raises SearchError for ones it lacks."""
+        if sources is None:
+            return self.source_keys
+        available = ", ".join(SOURCE_NAMES.get(key, key) for key in self.source_keys)
+        if not sources:
+            raise SearchError(f"Pick at least one site to check: {available}.")
+        unknown = " or ".join(SOURCE_NAMES.get(key, key) for key in sources if key not in self.source_keys)
+        if unknown:
+            raise SearchError(f"I can't check {unknown} yet. Pick from: {available}.")
+        return sources
 
     def statuses(self, server_id: int) -> list[SearchStatus]:
         """This server's Searches with their status, oldest first."""
@@ -189,7 +209,7 @@ class SearchService:
     ) -> tuple[Search, Pending]:
         """Save a new Search and queue its Seeding run ahead of the schedule.
 
-        Checks, in order: posting permission, limits, area, name. Any refusal raises SearchError
+        Checks, in order: posting permission, limits, Sources, area, name. Any refusal raises SearchError
         and saves nothing.
         """
         if not can_post:
@@ -202,6 +222,7 @@ class SearchService:
             )
         if len(self.store.searches()) >= self.limits.total:
             raise SearchError(AT_TOTAL_LIMIT)
+        sources = self._check_sources(new.sources)
         try:
             area = self.areas.resolve(new.area)
         except AreaNotFound as error:
@@ -218,7 +239,7 @@ class SearchService:
         name = (new.name or "").strip() or summarize(criteria)
         search = Search(
             id=self.new_id(), server_id=server_id, channel_id=channel_id, created_by=user_id, name=name,
-            criteria=criteria, sources=new.sources if new.sources is not None else self.source_keys,
+            criteria=criteria, sources=sources,
             created_at=self.clock(),
         )
         try:

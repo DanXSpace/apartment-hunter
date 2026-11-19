@@ -52,10 +52,13 @@ class SourceResult:
 
 @dataclass(frozen=True)
 class RunOutcome:
+    """How a Run went. `error` is a plain-language reason when the Run failed unexpectedly."""
+
     search_id: str
     results: tuple[SourceResult, ...]
     alerts_sent: int
     channel_gone: bool = False
+    error: str | None = None
 
 
 class SearchRunner:

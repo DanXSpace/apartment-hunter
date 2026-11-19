@@ -190,3 +190,26 @@ def test_statuses_show_not_run_yet_running_paused_and_healthy(env):
     home = env.service.statuses(1)[1]
     assert (home.state, home.reason, home.listings) == ("Healthy", None, 1)
     assert home.last_run is not None
+
+
+def test_an_unexpected_error_resolves_the_pending_with_a_plain_failure(env, caplog):
+    env.zillow.pages = [RuntimeError("parser exploded")]
+    _, pending = env.service.create(1, 10, 99, NewSearch("Chicago, IL", name="Home"), can_post=True)
+    env.service.create(1, 10, 99, NewSearch("Chicago, IL", name="Other"), can_post=True)
+    env.zillow.pages.append([make_listing("a")])
+    assert env.scheduler.run_pending() == 2
+    outcome = pending.wait(0)
+    assert outcome.error == ("Something went wrong checking this Search. "
+                             "The owner can find details in the log.")
+    assert "parser exploded" in caplog.text and "Traceback" in caplog.text
+    assert env.service.statuses(1)[1].state == "Healthy"
+
+
+def test_create_refuses_sources_the_bot_does_not_have_and_saves_nothing(env):
+    with pytest.raises(SearchError) as refused:
+        env.service.create(1, 10, 99, NewSearch("Chicago, IL", sources=("zillow", "craigslist")),
+                           can_post=True)
+    assert str(refused.value) == "I can't check Craigslist yet. Pick from: Zillow."
+    with pytest.raises(SearchError, match="Pick at least one"):
+        env.service.create(1, 10, 99, NewSearch("Chicago, IL", sources=()), can_post=True)
+    assert env.store.searches() == []
