@@ -177,3 +177,28 @@ def test_suggest_returns_nothing_and_caches_nothing_when_the_lookup_fails():
     assert lookup.suggest("Chi") == ["Lincoln Park, Chicago, IL", "Chicago, IL"]
     assert lookup.suggest("Chi") == ["Lincoln Park, Chicago, IL", "Chicago, IL"]
     assert len(http.requested) == 2
+
+
+ADDRESS_FIRST_BODY = json.dumps({"results": [
+    {
+        "display": "1906 N Lincoln Park W Chicago, IL 60614",
+        "resultType": "Address",
+        "metaData": {"addressType": "rental_address"},
+    },
+    {
+        "display": "Lincoln Park, Chicago, IL",
+        "resultType": "Region",
+        "metaData": {"regionId": 269590, "regionType": "neighborhood", "lat": 41.9237, "lng": -87.6505},
+    },
+]})
+
+
+def test_resolve_refuses_an_address_instead_of_picking_a_nearby_place():
+    lookup = AreaLookup(FakeHttp(ADDRESS_FIRST_BODY), SITES, clock=FakeClock())
+    with pytest.raises(AreaNotFound, match='couldn\'t find a place called "1906 N Lincoln Park W'):
+        lookup.resolve("1906 N Lincoln Park W Chicago, IL 60614")
+
+
+def test_resolve_accepts_a_place_typed_exactly_even_when_an_address_comes_first():
+    lookup = AreaLookup(FakeHttp(ADDRESS_FIRST_BODY), SITES, clock=FakeClock())
+    assert lookup.resolve("lincoln park, chicago, il").zillow_region_id == 269590
