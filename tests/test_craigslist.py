@@ -22,10 +22,17 @@ def page(*items):
 
 def test_search_url():
     c = Criteria(LINCOLN_PARK, min_price=1500, max_price=2400, min_beds=2, min_baths=1,
-                 home_type=HomeType.TOWNHOME, pets=Pets.DOGS)
+                 home_type=HomeType.TOWNHOME, pets=Pets.SMALL_DOGS)
     assert search_url(c) == ("https://chicago.craigslist.org/search/apa?sort=date&lat=41.9237&lon=-87.6505"
                              "&search_distance=2&min_price=1500&max_price=2400&min_bedrooms=2"
                              "&min_bathrooms=1&pets_dog=1&housing_type=9")
+
+
+def test_large_dogs_and_cats_filters():
+    assert search_url(Criteria(CHICAGO, pets=Pets.LARGE_DOGS)) == (
+        "https://chicago.craigslist.org/search/apa?sort=date&lat=41.8781&lon=-87.6298&search_distance=10"
+        "&pets_dog=1")
+    assert search_url(Criteria(CHICAGO, pets=Pets.CATS)).endswith("&search_distance=10&pets_cat=1")
 
 
 def test_search_url_repeats_housing_types_and_skips_unset_filters():

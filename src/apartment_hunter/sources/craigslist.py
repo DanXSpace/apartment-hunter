@@ -46,7 +46,7 @@ def search_url(criteria: Criteria) -> str:
         params.append(("min_bedrooms", _plain(criteria.min_beds)))
     if criteria.min_baths is not None:
         params.append(("min_bathrooms", _plain(criteria.min_baths)))
-    if criteria.pets is Pets.DOGS:
+    if criteria.pets in (Pets.SMALL_DOGS, Pets.LARGE_DOGS):  # Craigslist has one dogs filter
         params.append(("pets_dog", "1"))
     elif criteria.pets is Pets.CATS:
         params.append(("pets_cat", "1"))

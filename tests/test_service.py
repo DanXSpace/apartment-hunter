@@ -68,10 +68,10 @@ def env():
 def test_create_seeds_right_away_and_reports_the_count(env):
     env.zillow.pages = [SourcePage([make_listing("a"), make_listing("b")], 214, False)]
     search, pending = env.service.create(1, 10, 99, NewSearch("Chicago, IL", max_price=2400, min_beds=2,
-                                                             pets=Pets.DOGS), can_post=True)
+                                                             pets=Pets.SMALL_DOGS), can_post=True)
     env.scheduler.run_pending()
     outcome = pending.wait(0)
-    assert search.name == "Chicago, IL · 2+ bd · up to $2,400 · dogs"
+    assert search.name == "Chicago, IL · 2+ bd · up to $2,400 · small dogs"
     assert outcome.results[0].total == 214 and outcome.results[0].seeded
     assert env.notifiers[10].texts == [] and env.notifiers[10].listings == []
 

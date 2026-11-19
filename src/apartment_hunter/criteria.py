@@ -14,8 +14,9 @@ class HomeType(StrEnum):
 
 class Pets(StrEnum):
     NONE = "none"
-    DOGS = "dogs"
     CATS = "cats"
+    SMALL_DOGS = "small_dogs"
+    LARGE_DOGS = "large_dogs"
 
 
 @dataclass(frozen=True)
@@ -76,7 +77,7 @@ def summarize(criteria: Criteria) -> str:
     if criteria.home_type is not HomeType.ANY:
         parts.append(_HOME_TYPE_LABELS[criteria.home_type])
     if criteria.pets is not Pets.NONE:
-        parts.append(criteria.pets.value)
+        parts.append(criteria.pets.value.replace("_", " "))
     return " · ".join(parts)
 
 

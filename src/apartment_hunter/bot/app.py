@@ -47,8 +47,9 @@ HOME_TYPES = [
 ]
 PETS = [
     app_commands.Choice(name="No requirement", value=Pets.NONE.value),
-    app_commands.Choice(name="Dogs", value=Pets.DOGS.value),
     app_commands.Choice(name="Cats", value=Pets.CATS.value),
+    app_commands.Choice(name="Small dogs", value=Pets.SMALL_DOGS.value),
+    app_commands.Choice(name="Large dogs", value=Pets.LARGE_DOGS.value),
 ]
 SOURCES = [
     app_commands.Choice(name="Zillow and Craigslist", value="both"),

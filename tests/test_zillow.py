@@ -41,7 +41,8 @@ BASE_KEYS = {"sortSelection", "isForRent", "isForSaleByAgent", "isForSaleByOwner
 
 
 def test_search_url_carries_region_filters_paging_and_newest_first():
-    c = Criteria(LINCOLN_PARK, min_price=1500, max_price=2400, min_beds=2, min_baths=1, pets=Pets.DOGS)
+    c = Criteria(LINCOLN_PARK, min_price=1500, max_price=2400, min_beds=2, min_baths=1,
+                 pets=Pets.SMALL_DOGS)
     url = search_url(c, page=2)
     assert url.startswith("https://www.zillow.com/homes/for_rent/?searchQueryState=")
     state = query_state(url)
@@ -73,6 +74,12 @@ def test_home_type_excludes_the_other_types(home_type, excluded):
     f = query_state(search_url(Criteria(CHICAGO, home_type=home_type)))["filterState"]
     assert set(f) - BASE_KEYS == excluded
     assert all(f[k] == {"value": False} for k in excluded)
+
+
+def test_large_dogs_filter():
+    f = query_state(search_url(Criteria(CHICAGO, pets=Pets.LARGE_DOGS)))["filterState"]
+    assert set(f) - BASE_KEYS == {"onlyRentalLargeDogsAllowed"}
+    assert f["onlyRentalLargeDogsAllowed"] == {"value": True}
 
 
 def test_cats_filter():

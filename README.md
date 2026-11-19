@@ -3,17 +3,17 @@
 A Discord bot that watches Zillow and Craigslist for rentals. Add it to your server, tell it what you're looking for with `/search`, and new listings and price drops are posted in your channel. No browser, nothing to install if you're just using it.
 
 ```
-/search new  area: Chicago, IL   max_price: 2400   min_beds: 2   pets: dogs
+/search new  area: Chicago, IL   max_price: 2400   min_beds: 2   pets: Small dogs
 
-  Apartment Hunter: Checking Zillow and Craigslist for "Chicago, IL · 2+ bd · up to $2,400 · dogs"…
-  Apartment Hunter: ✅ Watching "Chicago, IL · 2+ bd · up to $2,400 · dogs".
+  Apartment Hunter: Checking Zillow and Craigslist for "Chicago, IL · 2+ bd · up to $2,400 · small dogs"…
+  Apartment Hunter: ✅ Watching "Chicago, IL · 2+ bd · up to $2,400 · small dogs".
                     214 places match right now. I'll post new ones and price drops in this channel.
 
 (later, same channel)
   🏠 1840 W Grand Ave, Chicago, IL                         [photo]
      New listing on Zillow
      💰 $2,250/mo    🛏 2    🛁 1
-     Chicago, IL · 2+ bd · up to $2,400 · dogs
+     Chicago, IL · 2+ bd · up to $2,400 · small dogs
 ```
 
 - **No alert flood on day one.** A search's first check quietly notes what's already listed; after that you only hear about new places and price drops.

@@ -44,7 +44,12 @@ _ACCEPTED_HOME_TYPES = {
     HomeType.HOUSE: {"SINGLE_FAMILY"},
     HomeType.TOWNHOME: {"TOWNHOUSE"},
 }
-_BLOCK_MARKERS = ("px-captcha", "Press & Hold")
+_PET_FILTERS = {
+    Pets.CATS: "onlyRentalCatsAllowed",
+    Pets.SMALL_DOGS: "onlyRentalSmallDogsAllowed",
+    Pets.LARGE_DOGS: "onlyRentalLargeDogsAllowed",
+}
+_BLOCK_MARKERS =("px-captcha", "Press & Hold")
 _BLOCKED = (
     "Zillow is blocking requests from this computer right now (bot protection). "
     "This usually clears up on its own."
@@ -71,10 +76,8 @@ def search_url(criteria: Criteria, page: int = 1) -> str:
         filters["beds"] = {"min": criteria.min_beds}
     if criteria.min_baths is not None:
         filters["baths"] = {"min": criteria.min_baths}
-    if criteria.pets is Pets.DOGS:
-        filters["onlyRentalSmallDogsAllowed"] = {"value": True}
-    elif criteria.pets is Pets.CATS:
-        filters["onlyRentalCatsAllowed"] = {"value": True}
+    if criteria.pets is not Pets.NONE:
+        filters[_PET_FILTERS[criteria.pets]] = {"value": True}
     for name in _EXCLUDED_HOME_TYPES.get(criteria.home_type, ()):
         filters[name] = {"value": False}
     state = {
