@@ -247,9 +247,10 @@ def build_client(
         min_baths="Fewest bathrooms (0 = no minimum)",
         home_type="Kind of place",
         pets="Pets that must be allowed",
+        sources="Where to look",
         name="A new name for this search",
     )
-    @app_commands.choices(home_type=HOME_TYPES, pets=PETS)
+    @app_commands.choices(home_type=HOME_TYPES, pets=PETS, sources=SOURCES)
     async def edit(
         interaction: discord.Interaction,
         search: str,
@@ -260,6 +261,7 @@ def build_client(
         min_baths: app_commands.Range[float, 0, 10] | None = None,
         home_type: app_commands.Choice[str] | None = None,
         pets: app_commands.Choice[str] | None = None,
+        sources: app_commands.Choice[str] | None = None,
         name: app_commands.Range[str, 1, 60] | None = None,
     ) -> None:
         assert interaction.guild is not None  # guild_only
@@ -272,6 +274,12 @@ def build_client(
             min_baths=min_baths,
             home_type=HomeType(home_type.value) if home_type else None,
             pets=Pets(pets.value) if pets else None,
+            # None leaves the sites unchanged, so "both" has to name every site.
+            sources=(
+                None if sources is None
+                else service.source_keys if sources.value == "both"
+                else (sources.value,)
+            ),
             name=name,
         )
         await interaction.response.defer(ephemeral=True, thinking=True)
