@@ -17,6 +17,7 @@ from apartment_hunter.scheduler import Scheduler
 from apartment_hunter.service import Limits, SearchService
 from apartment_hunter.settings import BotSettings, SettingsError, load_settings
 from apartment_hunter.sources import Source
+from apartment_hunter.sources.craigslist import CraigslistSource
 from apartment_hunter.sources.http import CurlHttpClient, PoliteHttpClient
 from apartment_hunter.sources.zillow import ZillowSource
 from apartment_hunter.storage import Store
@@ -61,7 +62,7 @@ def _run(settings: BotSettings, data: DataDir) -> int:
     run_http = PoliteHttpClient(CurlHttpClient())
     # Autocomplete must answer within Discord's 3 seconds, so lookups never wait behind polite gaps.
     areas = AreaLookup(CurlHttpClient(timeout=2.5))
-    sources: dict[str, Source] = {"zillow": ZillowSource(run_http)}
+    sources: dict[str, Source] = {"zillow": ZillowSource(run_http), "craigslist": CraigslistSource(run_http)}
 
     # The lambdas look `bridge` and `service` up when called, after all of them exist.
     runner = SearchRunner(sources, store, lambda search: ChannelNotifier(bridge, search.channel_id))
