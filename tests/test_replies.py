@@ -14,9 +14,10 @@ from apartment_hunter.bot.replies import (
     resumed_reply,
     statuses_reply,
 )
+from apartment_hunter.criteria import Criteria
 from apartment_hunter.runner import RunOutcome, SourceResult
 from apartment_hunter.service import Limits, SearchStatus
-from conftest import AT, make_search
+from conftest import AT, CHICAGO, make_search
 
 SEARCH = make_search(name="Chicago 2BR", sources=("zillow", "craigslist"))
 
@@ -54,6 +55,14 @@ def test_created_reply_when_one_source_failed():
         "(Craigslist answered with an error (HTTP 500).); I'll keep trying.")
 
 
+def test_created_reply_suggests_narrowing_even_when_the_other_source_failed():
+    outcome = RunOutcome("s1", (ok("zillow", 900, more=True), failed("craigslist", "Craigslist is down.")), 0)
+    assert created_reply(SEARCH, outcome, 15) == (
+        '✅ Watching "Chicago 2BR". 900 places match on Zillow right now. Craigslist didn\'t work yet '
+        "(Craigslist is down.); I'll keep trying. That's more than one page of results, so price drops "
+        "are only caught among the newest ones. Narrow it with /search edit to catch them all.")
+
+
 def test_created_reply_when_everything_failed():
     outcome = RunOutcome("s1", (failed("zillow", "Zillow is blocking requests."),), 0)
     assert created_reply(SEARCH, outcome, 15) == (
@@ -69,8 +78,17 @@ def test_created_reply_while_the_first_check_is_still_going():
 def test_statuses_reply_lines_and_empty_server():
     status = SearchStatus(SEARCH, "Needs attention", "Zillow: blocked", AT - timedelta(minutes=12), 214)
     assert statuses_reply([status], AT) == (
-        "**Chicago 2BR** · Needs attention (Zillow: blocked) · last checked 12 min ago · 214 seen · <#10>")
+        "**Chicago 2BR** · Chicago, IL · Needs attention (Zillow: blocked) · last checked 12 min ago · "
+        "214 seen · <#10>")
     assert statuses_reply([], AT) == "No searches in this server yet. Start one with /search new."
+
+
+def test_statuses_reply_shows_the_criteria_once_when_the_name_is_the_summary():
+    named_after = make_search(name="Chicago, IL · up to $2,400",
+                              criteria=Criteria(CHICAGO, max_price=2400))
+    status = SearchStatus(named_after, "Not run yet", None, None, 0)
+    assert statuses_reply([status], AT) == (
+        "**Chicago, IL · up to $2,400** · Not run yet · last checked never · 0 seen · <#10>")
 
 
 def test_invite_url():
@@ -82,6 +100,12 @@ def test_help_reply_states_the_owner_s_limits():
     text = help_reply(Limits(per_server=3, total=12), 20)
     assert "Up to 3 searches per server, and 12 in total" in text
     assert "about every 20 minutes" in text
+
+
+def test_help_reply_names_both_sources_and_the_sources_option():
+    text = help_reply(Limits(), 15)
+    assert "watches Zillow and Craigslist for rentals" in text
+    assert "`sources`" in text
 
 
 def test_edited_reply_says_when_it_takes_a_fresh_look():

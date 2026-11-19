@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from apartment_hunter.criteria import summarize
 from apartment_hunter.models import Search
 from apartment_hunter.runner import RunOutcome
 from apartment_hunter.service import Limits, SearchError, SearchStatus
@@ -39,11 +40,12 @@ def created_reply(search: Search, outcome: RunOutcome | None, interval_minutes: 
         return (f'⚠️ I saved "{search.name}", but couldn\'t check it yet: {errors} '
                 f"I'll keep trying every {interval_minutes:g} minutes and post here once it works.")
     if failed:
-        return (f'✅ Watching "{search.name}". {places_match(matches)} on '
+        text = (f'✅ Watching "{search.name}". {places_match(matches)} on '
                 f"{_names([r.source for r in worked])} right now. "
                 f"{_names([r.source for r in failed])} didn't work yet ({errors}); I'll keep trying.")
-    text = (f'✅ Watching "{search.name}". {places_match(matches)} right now. '
-            "I'll post new ones and price drops in this channel.")
+    else:
+        text = (f'✅ Watching "{search.name}". {places_match(matches)} right now. '
+                "I'll post new ones and price drops in this channel.")
     if any(r.more_pages for r in outcome.results):
         text += BROAD_SEARCH
     return text
@@ -101,21 +103,24 @@ def statuses_reply(statuses: list[SearchStatus], now: datetime) -> str:
 
 def _status_line(status: SearchStatus, now: datetime) -> str:
     search = status.search
+    summary = summarize(search.criteria)
+    criteria = "" if summary == search.name else f" · {summary}"
     reason = f" ({status.reason})" if status.reason else ""
     checked = time_ago((now - status.last_run).total_seconds()) if status.last_run else "never"
-    return (f"**{search.name}** · {status.state}{reason} · last checked {checked} · "
+    return (f"**{search.name}**{criteria} · {status.state}{reason} · last checked {checked} · "
             f"{status.listings} seen · <#{search.channel_id}>")
 
 
 def help_reply(limits: Limits, interval_minutes: float) -> str:
     """The reply to /search help."""
     return "\n".join([
-        "**Apartment Hunter** watches Zillow for rentals that match what you ask for and posts new "
-        "listings and price drops in the channel where you started the search.",
+        "**Apartment Hunter** watches Zillow and Craigslist for rentals that match what you ask for and "
+        "posts new listings and price drops in the channel where you started the search.",
         "",
         "**Commands**",
         "• `/search new` starts a search here. Give it an area (a city, neighborhood or ZIP code) and, "
         "if you like, a price range, bedrooms, bathrooms, home type, pets and a name. "
+        "It checks both sites unless you pick one with `sources`. "
         "The first check only takes note of what's already listed; after that, new places get posted.",
         "• `/search list` shows this server's searches and how they're doing.",
         "• `/search edit` changes a search. Changing what it looks for starts it fresh, quietly; "

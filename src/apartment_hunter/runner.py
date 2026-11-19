@@ -14,9 +14,16 @@ from apartment_hunter.text import places_match
 log = logging.getLogger(__name__)
 
 
-def summary(count: int, source: str, results_url: str) -> str:
-    places = "place" if count == 1 else "places"
-    return f"…and {count} more new {places} on {SOURCE_NAMES[source]}: {results_url}"
+def summary(new: int, drops: int, source: str, results_url: str) -> str:
+    """The message for the Alerts past the burst cap: `new` new listings and `drops` price drops."""
+    count = new + drops
+    if not drops:
+        what = "new place" if count == 1 else "new places"
+    elif not new:
+        what = "price drop" if count == 1 else "price drops"
+    else:
+        what = "new places and price drops"
+    return f"…and {count} more {what} on {SOURCE_NAMES[source]}: {results_url}"
 
 
 def broken_text(source: str, search_name: str, streak: int, reason: str, working: list[str]) -> str:
@@ -107,10 +114,13 @@ class SearchRunner:
                     self._store.save_listing(search.id, listing)
                     sent += 1
             for key in search.sources:
-                rest = [listing for listing, _ in candidates[self._burst_cap:] if listing.source == key]
+                rest = [(listing, previous) for listing, previous in candidates[self._burst_cap:]
+                        if listing.source == key]
+                drops = sum(previous is not None for _, previous in rest)
                 url = self._sources[key].results_url(search.criteria)
-                if rest and self._deliver(search, partial(notifier.send_text, summary(len(rest), key, url))):
-                    for listing in rest:
+                message = summary(len(rest) - drops, drops, key, url)
+                if rest and self._deliver(search, partial(notifier.send_text, message)):
+                    for listing, _ in rest:
                         self._store.save_listing(search.id, listing)
             for result in results:
                 self._send_health(search, notifier, result, before[result.source], results)

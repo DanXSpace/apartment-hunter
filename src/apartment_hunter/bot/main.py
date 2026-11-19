@@ -26,7 +26,7 @@ log = logging.getLogger("apartment_hunter")
 
 DESCRIPTION = """\
 Run the Apartment Hunter Discord bot. People add it to their server and use /search to get new
-Zillow rentals posted in a channel.
+Zillow and Craigslist rentals posted in a channel (the sources option picks one site or both).
 
 Settings come from environment variables, or from a .env file in the project folder
 (see .env.example). DISCORD_TOKEN is required.

@@ -306,6 +306,15 @@ def test_check_too_soon_rounds_the_minutes_left_up(env):
     assert str(refused.value) == 'You can check "Home" again in 4 minutes.'
 
 
+def test_check_too_soon_says_one_minute_in_the_singular(env):
+    env.service.create(1, 10, 99, NewSearch("Chicago, IL", name="Home"), can_post=True)
+    env.service.check(1, "Home")
+    env.clock.advance(4.5)
+    with pytest.raises(SearchError) as refused:
+        env.service.check(1, "Home")
+    assert str(refused.value) == 'You can check "Home" again in 1 minute.'
+
+
 def test_other_servers_cannot_touch_a_search(env):
     env.service.create(1, 10, 99, NewSearch("Chicago, IL", name="Home"), can_post=True)
     with pytest.raises(SearchError) as refused:

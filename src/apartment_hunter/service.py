@@ -372,7 +372,10 @@ class SearchService:
         if last is not None:
             left = self.limits.check_gap_minutes - (now - last).total_seconds() / 60
             if left > 0:
-                raise SearchError(f'You can check "{search.name}" again in {math.ceil(left)} minutes.')
+                minutes = math.ceil(left)
+                raise SearchError(
+                    f'You can check "{search.name}" again in {minutes} minute{"" if minutes == 1 else "s"}.'
+                )
         self._last_check[search.id] = now
         return search, self._run_now(search.id)
 
