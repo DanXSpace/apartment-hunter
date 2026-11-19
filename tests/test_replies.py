@@ -1,6 +1,18 @@
 from datetime import timedelta
 
-from apartment_hunter.bot.replies import checking_reply, created_reply, help_reply, invite_url, statuses_reply
+from apartment_hunter.bot.replies import (
+    checked_reply,
+    checking_reply,
+    confirm_delete_reply,
+    created_reply,
+    deleted_reply,
+    edited_reply,
+    help_reply,
+    invite_url,
+    paused_reply,
+    resumed_reply,
+    statuses_reply,
+)
 from apartment_hunter.runner import RunOutcome, SourceResult
 from apartment_hunter.service import Limits, SearchStatus
 from conftest import AT, make_search
@@ -69,3 +81,31 @@ def test_help_reply_states_the_owner_s_limits():
     text = help_reply(Limits(per_server=3, total=12), 20)
     assert "Up to 3 searches per server, and 12 in total" in text
     assert "about every 20 minutes" in text
+
+
+def test_edited_reply_says_when_it_takes_a_fresh_look():
+    assert edited_reply(SEARCH, True) == (
+        'Updated "Chicago 2BR". Its criteria changed, so it\'s taking a fresh look; '
+        "no alerts for what's already listed.")
+    assert edited_reply(SEARCH, False) == 'Updated "Chicago 2BR".'
+
+
+def test_paused_resumed_and_deleted_replies():
+    assert paused_reply(SEARCH) == 'Paused "Chicago 2BR". Use /search resume to start it again.'
+    assert resumed_reply(SEARCH) == 'Resumed "Chicago 2BR".'
+    assert deleted_reply("Chicago 2BR") == 'Deleted "Chicago 2BR".'
+
+
+def test_confirm_delete_reply_warns_it_cannot_be_undone():
+    assert confirm_delete_reply(SEARCH) == (
+        'Delete "Chicago 2BR" and everything it has seen? This can\'t be undone.')
+
+
+def test_checked_reply_counts_alerts_and_names_failed_sources():
+    assert checked_reply(SEARCH, RunOutcome("s1", (ok("zillow", 3), ok("craigslist", 1)), 1)) == (
+        'Checked "Chicago 2BR": 1 new alert posted.')
+    outcome = RunOutcome("s1", (ok("zillow", 3), failed("craigslist", "Craigslist is down.")), 2)
+    assert checked_reply(SEARCH, outcome) == (
+        'Checked "Chicago 2BR": 2 new alerts posted. Craigslist didn\'t work (Craigslist is down.)')
+    assert checked_reply(SEARCH, None) == (
+        'Still checking "Chicago 2BR"; any alerts will show up in the channel.')

@@ -49,6 +49,44 @@ def created_reply(search: Search, outcome: RunOutcome | None, interval_minutes: 
     return text
 
 
+def edited_reply(search: Search, reseeding: bool) -> str:
+    if reseeding:
+        return (f'Updated "{search.name}". Its criteria changed, so it\'s taking a fresh look; '
+                "no alerts for what's already listed.")
+    return f'Updated "{search.name}".'
+
+
+def paused_reply(search: Search) -> str:
+    return f'Paused "{search.name}". Use /search resume to start it again.'
+
+
+def resumed_reply(search: Search) -> str:
+    return f'Resumed "{search.name}".'
+
+
+def confirm_delete_reply(search: Search) -> str:
+    return f'Delete "{search.name}" and everything it has seen? This can\'t be undone.'
+
+
+def deleted_reply(name: str) -> str:
+    return f'Deleted "{name}".'
+
+
+def checked_reply(search: Search, outcome: RunOutcome | None) -> str:
+    """The reply to /search check once its Run finished (or None: it's still going)."""
+    if outcome is None:
+        return f'Still checking "{search.name}"; any alerts will show up in the channel.'
+    n = outcome.alerts_sent
+    text = f'Checked "{search.name}": {n} new {"alert" if n == 1 else "alerts"} posted.'
+    failed = [r for r in outcome.results if not r.ok]
+    errors = [r.error or "" for r in failed] + ([outcome.error] if outcome.error else [])
+    if failed:
+        text += f" {_names([r.source for r in failed])} didn't work ({'; '.join(errors)})"
+    elif outcome.error:
+        text += f" {outcome.error}"
+    return text
+
+
 def statuses_reply(statuses: list[SearchStatus], now: datetime) -> str:
     """The reply to /search list: one line per Search in this server."""
     if not statuses:
@@ -75,11 +113,17 @@ def help_reply(limits: Limits, interval_minutes: float) -> str:
         "if you like, a price range, bedrooms, bathrooms, home type, pets and a name. "
         "The first check only takes note of what's already listed; after that, new places get posted.",
         "• `/search list` shows this server's searches and how they're doing.",
+        "• `/search edit` changes a search. Changing what it looks for starts it fresh, quietly; "
+        "renaming it doesn't.",
+        "• `/search pause` and `/search resume` stop and restart a search's checks.",
+        "• `/search delete` deletes a search (you'll be asked to confirm).",
+        "• `/search check` checks a search right now.",
         "• `/search help` shows this message.",
         "",
         "**Limits**",
         f"• Up to {limits.per_server} searches per server, and {limits.total} in total for the whole bot.",
         f"• Each search is checked about every {interval_minutes:g} minutes.",
+        f"• `/search check` works once every {limits.check_gap_minutes:g} minutes per search.",
         "",
         "**What the status means**",
         "• **Healthy**: the last check worked.",
