@@ -10,6 +10,7 @@ from apartment_hunter.bot.replies import (
     first_check_cancelled_reply,
     help_reply,
     invite_url,
+    not_in_test_server_reply,
     paused_reply,
     resumed_reply,
     statuses_reply,
@@ -139,3 +140,10 @@ def test_checked_reply_counts_alerts_and_names_failed_sources():
         'Checked "Chicago 2BR": 2 new alerts posted. Craigslist didn\'t work (Craigslist is down.)')
     assert checked_reply(SEARCH, None) == (
         'Still checking "Chicago 2BR"; any alerts will show up in the channel.')
+
+
+def test_not_in_test_server_reply_gives_the_invite_link():
+    assert not_in_test_server_reply("https://example.test/invite") == (
+        "The bot isn't in your test server yet. Invite it with: https://example.test/invite "
+        "(commands will appear as soon as it joins)"
+    )

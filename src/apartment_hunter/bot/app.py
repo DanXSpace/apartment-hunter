@@ -21,6 +21,7 @@ from apartment_hunter.bot.replies import (
     first_check_cancelled_reply,
     help_reply,
     invite_url,
+    not_in_test_server_reply,
     paused_reply,
     refusal,
     resumed_reply,
@@ -72,20 +73,34 @@ class _Bot(discord.Client):
         self._service = service
         self._on_first_ready: Callable[[], None] | None = on_first_ready
         self.background: set[asyncio.Task[None]] = set()
+        self._dev_guild_synced = False
 
     async def setup_hook(self) -> None:
+        # Before any sync, so a new owner sees the link even if the sync is refused.
+        log.info("Invite link: %s", self._invite_link())
         if self._settings.dev_guild_id is not None:
-            guild = discord.Object(id=self._settings.dev_guild_id)
-            self.tree.copy_global_to(guild=guild)
-            synced = await self.tree.sync(guild=guild)
-            log.info("Registered %d commands in the development server %s", len(synced), guild.id)
+            await self._sync_dev_guild()
         else:
             synced = await self.tree.sync()
             log.info("Registered %d commands globally (they can take up to an hour to appear)", len(synced))
 
+    def _invite_link(self) -> str:
+        return invite_url(self.application_id or 0)
+
+    async def _sync_dev_guild(self) -> None:
+        guild = discord.Object(id=self._settings.dev_guild_id or 0)
+        self.tree.copy_global_to(guild=guild)
+        try:
+            synced = await self.tree.sync(guild=guild)
+        except discord.Forbidden:
+            log.info(not_in_test_server_reply(self._invite_link()))
+            self._dev_guild_synced = False
+            return
+        self._dev_guild_synced = True
+        log.info("Registered %d commands in the development server %s", len(synced), guild.id)
+
     async def on_ready(self) -> None:
-        log.info("Connected to Discord as %s. Invite link: %s",
-                 self.user, invite_url(self.application_id or 0))
+        log.info("Connected to Discord as %s. Invite link: %s", self.user, self._invite_link())
         # Removed from a server while offline: no on_guild_remove came, so clean up now.
         deleted = await asyncio.to_thread(self._service.keep_servers, {guild.id for guild in self.guilds})
         if deleted:
@@ -97,6 +112,11 @@ class _Bot(discord.Client):
             await _leave_if_not_allowed(guild, self._settings.allowed_servers)
 
     async def on_guild_join(self, guild: discord.Guild) -> None:
+        if guild.id == self._settings.dev_guild_id and not self._dev_guild_synced:
+            try:
+                await self._sync_dev_guild()
+            except discord.HTTPException:
+                log.warning("Couldn't register commands in the development server", exc_info=True)
         await _leave_if_not_allowed(guild, self._settings.allowed_servers)
 
 

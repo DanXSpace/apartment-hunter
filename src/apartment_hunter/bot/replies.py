@@ -146,5 +146,11 @@ def invite_url(application_id: int) -> str:
             f"&scope=bot+applications.commands&permissions={PERMISSIONS}")
 
 
+def not_in_test_server_reply(invite_link: str) -> str:
+    """The log line for a first run: the bot hasn't been invited to the development server yet."""
+    return (f"The bot isn't in your test server yet. Invite it with: {invite_link} "
+            "(commands will appear as soon as it joins)")
+
+
 def refusal(e: SearchError) -> str:
     return str(e)
