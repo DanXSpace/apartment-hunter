@@ -9,7 +9,11 @@ dependencies = [
     "python-dotenv",
     "curl-cffi>=0.16.3",
     "scrapling>=0.5.1",
+    "discord-py>=2.7.1",
 ]
+
+[project.scripts]
+apartment-hunter = "apartment_hunter.bot.main:main"
 
 [dependency-groups]
 dev = [
