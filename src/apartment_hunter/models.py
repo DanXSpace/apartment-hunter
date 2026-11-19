@@ -11,7 +11,7 @@ class Listing:
     `source` is the key of the Source it came from ("zillow" or "craigslist"); a Search keys its
     Listings by (source, listing_id).
 
-    Any numeric field may be None when the site doesn't show it (e.g. "Call for Rent").
+    Any numeric field may be None when the site doesn't show it (e.g. Zillow's "Contact for price").
     Studios have beds_min == 0.
     """
 
