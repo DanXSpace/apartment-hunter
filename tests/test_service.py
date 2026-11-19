@@ -13,18 +13,7 @@ from apartment_hunter.service import Limits, NewSearch, SearchChanges, SearchErr
 from apartment_hunter.sources import ScrapeError, SourcePage
 from apartment_hunter.storage import Store
 from conftest import AT, CHICAGO, make_listing, make_search
-from fakes import FakeNotifier, FakeSource
-
-
-class FakeClock:
-    def __init__(self):
-        self.now = 1000.0
-
-    def __call__(self):
-        return self.now
-
-    def advance(self, minutes):
-        self.now += minutes * 60
+from fakes import MINUTE, FakeClock, FakeNotifier, FakeSource
 
 
 class FakeAreas:
@@ -79,13 +68,13 @@ def test_create_seeds_right_away_and_reports_the_count(env):
 def test_create_refuses_without_permission_and_saves_nothing(env):
     with pytest.raises(SearchError, match="can't post in this channel"):
         env.service.create(1, 10, 99, NewSearch("Chicago, IL"), can_post=False)
-    assert env.store.searches() == []
+    assert env.service.statuses(1) == []
 
 
 def test_create_refuses_an_unknown_area_and_saves_nothing(env):
     with pytest.raises(SearchError, match="couldn't find a place called"):
         env.service.create(1, 10, 99, NewSearch("Illinois"), can_post=True)
-    assert env.store.searches() == []
+    assert env.service.statuses(1) == []
 
 
 def test_limits_per_server_and_in_total(env):
@@ -118,32 +107,46 @@ def test_status_needs_attention_with_the_reason_after_one_failure(env):
     env.service.create(1, 10, 99, NewSearch("Chicago, IL"), can_post=True)
     env.scheduler.run_pending()
     assert env.service.statuses(1)[0].state == "Healthy"
-    env.clock.advance(15)
+    env.clock.advance(15 * MINUTE)
     env.scheduler.run_pending()
     status = env.service.statuses(1)[0]
     assert (status.state, status.reason) == ("Needs attention", "Zillow: Zillow is blocking requests.")
 
 
 def test_loaded_searches_are_spread_across_the_first_interval(env):
-    env.store.add_search(make_search("a", name="A"))
+    env.store.add_search(make_search("a", name="A"))  # saved by an earlier start of the bot
     env.store.add_search(make_search("b", name="B"))
+    env.zillow.pages = [[], []]
     offsets = iter([100.0, 700.0])
     env.service.rand = lambda lo, hi: next(offsets)
     env.service.load()
-    assert env.scheduler.next_run("a") == env.clock() + 100
-    assert env.scheduler.next_run("b") == env.clock() + 700
+
+    def states():
+        return [(s.search.name, s.state) for s in env.service.statuses(1)]
+
+    env.clock.advance(99)
+    env.scheduler.run_pending()
+    assert states() == [("A", "Not run yet"), ("B", "Not run yet")]
+    env.clock.advance(1)
+    env.scheduler.run_pending()
+    assert states() == [("A", "Healthy"), ("B", "Not run yet")]
+    env.clock.advance(600)
+    env.scheduler.run_pending()
+    assert states() == [("A", "Healthy"), ("B", "Healthy")]
 
 
 def test_channel_gone_pauses_the_search_and_tells_its_creator(env):
     env.zillow.pages = [[], [make_listing("a")]]
-    search, _ = env.service.create(1, 10, 99, NewSearch("Chicago, IL", name="Home"), can_post=True)
+    env.service.create(1, 10, 99, NewSearch("Chicago, IL", name="Home"), can_post=True)
     env.scheduler.run_pending()
     env.notifiers[10].gone = True
-    env.clock.advance(15)
+    env.clock.advance(15 * MINUTE)
     env.scheduler.run_pending()
     status = env.service.statuses(1)[0]
     assert status.state == "Needs attention" and "can't post" in status.reason
-    assert env.scheduler.is_paused(search.id)
+    assert status.search.paused
+    env.clock.advance(15 * MINUTE)
+    assert env.scheduler.run_pending() == 0
     assert env.dms == [(99, 'I paused your search "Home": I can\'t post in its channel anymore (it was '
                             "deleted or I lost permission). Fix the channel and use /search resume, or "
                             "delete it with /search delete.")]
@@ -161,7 +164,7 @@ def test_create_explains_when_the_place_lookup_is_down_and_saves_nothing(env):
         env.service.create(1, 10, 99, NewSearch("Chicago, IL"), can_post=True)
     assert str(refused.value) == ("I couldn't look up places right now: Zillow's place lookup isn't "
                                   "answering right now. Try again in a minute.")
-    assert env.store.searches() == []
+    assert env.service.statuses(1) == []
 
 
 class StatusCheckingSource(FakeSource):
@@ -212,7 +215,7 @@ def test_create_refuses_sources_the_bot_does_not_have_and_saves_nothing(env):
     assert str(refused.value) == "I can't check Craigslist yet. Pick from: Zillow."
     with pytest.raises(SearchError, match="Pick at least one"):
         env.service.create(1, 10, 99, NewSearch("Chicago, IL", sources=()), can_post=True)
-    assert env.store.searches() == []
+    assert env.service.statuses(1) == []
 
 
 def test_editing_criteria_reseeds_without_alerting(env):
@@ -231,7 +234,7 @@ def test_renaming_keeps_state_and_does_not_reseed(env):
     env.scheduler.run_pending()
     renamed, pending = env.service.edit(1, "home", SearchChanges(name="Flat"))
     assert pending is None and renamed.name == "Flat"
-    assert env.store.listing_count(search.id) == 1
+    assert env.service.statuses(1)[0].listings == 1
 
 
 def test_editing_a_minimum_to_zero_removes_it(env):
@@ -247,7 +250,7 @@ def test_editing_refuses_an_unknown_area_or_source_and_changes_nothing(env):
         env.service.edit(1, "Home", SearchChanges(area="Illinois", max_price=1800))
     with pytest.raises(SearchError, match="can't check Craigslist yet"):
         env.service.edit(1, "Home", SearchChanges(sources=("craigslist",)))
-    assert env.store.searches(1) == [search]
+    assert [s.search for s in env.service.statuses(1)] == [search]
 
 
 def test_renaming_to_a_name_already_used_in_the_server_is_refused(env):
@@ -262,7 +265,7 @@ def test_pause_skips_scheduled_runs_and_resume_restarts_them(env):
     env.service.create(1, 10, 99, NewSearch("Chicago, IL", name="Home"), can_post=True)
     env.scheduler.run_pending()
     env.service.pause(1, "Home")
-    env.clock.advance(15)
+    env.clock.advance(15 * MINUTE)
     assert env.scheduler.run_pending() == 0
     assert env.service.statuses(1)[0].state == "Paused"
     env.service.resume(1, "Home")
@@ -293,14 +296,14 @@ def test_check_runs_now_and_is_rate_limited(env):
     assert pending.wait(0) is not None
     with pytest.raises(SearchError, match='check "Home" again in 5 minutes'):
         env.service.check(1, "Home")
-    env.clock.advance(5)
+    env.clock.advance(5 * MINUTE)
     env.service.check(1, "Home")
 
 
 def test_check_too_soon_rounds_the_minutes_left_up(env):
     env.service.create(1, 10, 99, NewSearch("Chicago, IL", name="Home"), can_post=True)
     env.service.check(1, "Home")
-    env.clock.advance(1.5)
+    env.clock.advance(1.5 * MINUTE)
     with pytest.raises(SearchError) as refused:
         env.service.check(1, "Home")
     assert str(refused.value) == 'You can check "Home" again in 4 minutes.'
@@ -309,7 +312,7 @@ def test_check_too_soon_rounds_the_minutes_left_up(env):
 def test_check_too_soon_says_one_minute_in_the_singular(env):
     env.service.create(1, 10, 99, NewSearch("Chicago, IL", name="Home"), can_post=True)
     env.service.check(1, "Home")
-    env.clock.advance(4.5)
+    env.clock.advance(4.5 * MINUTE)
     with pytest.raises(SearchError) as refused:
         env.service.check(1, "Home")
     assert str(refused.value) == 'You can check "Home" again in 1 minute.'
@@ -330,15 +333,15 @@ def test_other_servers_cannot_touch_a_search(env):
 
 
 def test_bot_removed_from_a_server_deletes_its_searches(env):
-    a, pending = env.service.create(1, 10, 99, NewSearch("Chicago, IL", name="A"), can_post=True)
+    _, pending = env.service.create(1, 10, 99, NewSearch("Chicago, IL", name="A"), can_post=True)
     env.service.create(1, 10, 99, NewSearch("Chicago, IL", name="B"), can_post=True)
     env.service.create(2, 20, 99, NewSearch("Chicago, IL", name="C"), can_post=True)
     assert env.service.server_removed(1) == 2
-    assert env.store.searches(1) == []
-    assert [s.name for s in env.store.searches(2)] == ["C"]
+    assert env.service.statuses(1) == []
+    assert env.service.names(2, "") == ["C"]
     assert pending.cancelled
-    with pytest.raises(KeyError):
-        env.scheduler.run_now(a.id)
+    env.zillow.pages = [[]]
+    assert env.scheduler.run_pending() == 1  # only C's first Run is left
 
 
 def test_owner_hears_once_when_a_source_fails_everywhere_and_once_on_recovery(env):
@@ -348,7 +351,7 @@ def test_owner_hears_once_when_a_source_fails_everywhere_and_once_on_recovery(en
     env.service.create(2, 20, 98, NewSearch("Chicago, IL", name="B"), can_post=True)
     for _ in range(5):
         env.scheduler.run_pending()
-        env.clock.advance(15)
+        env.clock.advance(15 * MINUTE)
     assert [d for d in env.dms if d[0] == 7] == [
         (7, "⚠️ Zillow has failed in every search for 3 checks in a row: blocked. "
             "The host may be blocked, or Zillow changed its pages.")]
@@ -363,7 +366,7 @@ def test_owner_hears_of_recovery_only_once_a_search_that_ran_the_source_succeeds
     env.service.create(2, 20, 98, NewSearch("Chicago, IL", name="B"), can_post=True)
     for _ in range(3):
         env.scheduler.run_pending()
-        env.clock.advance(15)
+        env.clock.advance(15 * MINUTE)
     owner_dms = [text for user, text in env.dms if user == 7]
     assert len(owner_dms) == 1 and owner_dms[0].startswith("⚠️ Zillow has failed in every search")
     late = make_search("late", server_id=3, name="Not run yet", created_at=AT + timedelta(days=1))
@@ -376,15 +379,17 @@ def test_owner_hears_of_recovery_only_once_a_search_that_ran_the_source_succeeds
 
 def test_resume_after_the_channel_came_back_clears_the_reason(env):
     env.zillow.pages = [[], [make_listing("a")], [make_listing("a")]]
-    search, _ = env.service.create(1, 10, 99, NewSearch("Chicago, IL", name="Home"), can_post=True)
+    env.service.create(1, 10, 99, NewSearch("Chicago, IL", name="Home"), can_post=True)
     env.scheduler.run_pending()
     env.notifiers[10].gone = True
-    env.clock.advance(15)
+    env.clock.advance(15 * MINUTE)
     env.scheduler.run_pending()
     env.notifiers[10].gone = False
     env.service.resume(1, "Home")
     assert env.service.statuses(1)[0].state == "Healthy"
-    assert not env.scheduler.is_paused(search.id)
+    env.clock.advance(15 * MINUTE)
+    env.scheduler.run_pending()
+    assert env.notifiers[10].listings == [("a", None)]
 
 
 def test_on_connect_searches_of_servers_the_bot_left_while_offline_are_deleted(env):
@@ -392,7 +397,7 @@ def test_on_connect_searches_of_servers_the_bot_left_while_offline_are_deleted(e
     env.service.create(2, 20, 99, NewSearch("Chicago, IL", name="B"), can_post=True)
     env.service.create(3, 30, 99, NewSearch("Chicago, IL", name="C"), can_post=True)
     assert env.service.keep_servers({2, 3, 4}) == 1
-    assert [s.name for s in env.store.searches()] == ["B", "C"]
+    assert [env.service.names(server, "") for server in (1, 2, 3)] == [[], ["B"], ["C"]]
     assert pending.cancelled
 
 
@@ -400,7 +405,7 @@ def test_a_criteria_edit_renames_a_search_still_named_after_its_criteria(env):
     env.service.create(1, 10, 99, NewSearch("Chicago, IL", max_price=2400), can_post=True)
     edited, _ = env.service.edit(1, "Chicago, IL · up to $2,400", SearchChanges(max_price=1800))
     assert edited.name == "Chicago, IL · up to $1,800"
-    assert [s.name for s in env.store.searches(1)] == ["Chicago, IL · up to $1,800"]
+    assert env.service.names(1, "") == ["Chicago, IL · up to $1,800"]
 
 
 def test_a_criteria_edit_keeps_a_chosen_name_or_one_whose_new_summary_is_taken(env):
@@ -412,7 +417,7 @@ def test_a_criteria_edit_keeps_a_chosen_name_or_one_whose_new_summary_is_taken(e
     assert kept.name == "Home"
     clash, pending = env.service.edit(1, "Chicago, IL · up to $2,400", SearchChanges(max_price=1500))
     assert clash.name == "Chicago, IL · up to $2,400" and pending is not None
-    assert env.store.find_search(1, clash.name).criteria.max_price == 1500
+    assert env.service.find(1, clash.name).criteria.max_price == 1500
 
 
 class MidRunSource(FakeSource):
@@ -447,7 +452,7 @@ def test_an_edit_during_a_seeding_run_still_gets_its_own_quiet_seeding_run(env):
     _, edited = edits[0]
     assert edited.wait(0).results[0].seeded and created.wait(0).results[0].seeded
     assert env.notifiers[10].listings == []
-    env.clock.advance(15)
+    env.clock.advance(15 * MINUTE)
     env.scheduler.run_pending()
     assert env.notifiers[10].listings == [("d", None)]
 
@@ -458,7 +463,7 @@ def test_a_delete_during_a_run_sends_no_alerts_and_keeps_nothing(env):
     search, _ = env.service.create(1, 10, 99, NewSearch("Chicago, IL", name="Home"), can_post=True)
     env.scheduler.run_pending()
     zillow.during_fetch = lambda: env.service.delete(1, "Home")
-    env.clock.advance(15)
+    env.clock.advance(15 * MINUTE)
     env.scheduler.run_pending()
     assert env.notifiers[10].listings == [] and env.notifiers[10].texts == []
     assert env.service.statuses(1) == []

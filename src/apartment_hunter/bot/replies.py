@@ -32,19 +32,16 @@ def created_reply(search: Search, outcome: RunOutcome | None, interval_minutes: 
     if outcome is None:
         return (f'⏳ Saved "{search.name}". '
                 "The first check is taking a while; I'll post here once it's done.")
-    worked = [r for r in outcome.results if r.ok]
-    failed = [r for r in outcome.results if not r.ok]
-    matches = sum(r.total if r.total is not None else r.found for r in worked)
-    errors = "; ".join([r.error or "" for r in failed] + ([outcome.error] if outcome.error else []))
-    if not worked:
+    errors = "; ".join(outcome.errors)
+    if not outcome.worked:
         return (f'⚠️ I saved "{search.name}", but couldn\'t check it yet: {errors} '
                 f"I'll keep trying every {interval_minutes:g} minutes and post here once it works.")
-    if failed:
-        text = (f'✅ Watching "{search.name}". {places_match(matches)} on '
-                f"{_names([r.source for r in worked])} right now. "
-                f"{_names([r.source for r in failed])} didn't work yet ({errors}); I'll keep trying.")
+    if outcome.failed:
+        text = (f'✅ Watching "{search.name}". {places_match(outcome.matches)} on '
+                f"{_names(outcome.worked)} right now. "
+                f"{_names(outcome.failed)} didn't work yet ({errors}); I'll keep trying.")
     else:
-        text = (f'✅ Watching "{search.name}". {places_match(matches)} right now. '
+        text = (f'✅ Watching "{search.name}". {places_match(outcome.matches)} right now. '
                 "I'll post new ones and price drops in this channel.")
     if any(r.more_pages for r in outcome.results):
         text += BROAD_SEARCH
@@ -80,10 +77,8 @@ def checked_reply(search: Search, outcome: RunOutcome | None) -> str:
         return f'Still checking "{search.name}"; any alerts will show up in the channel.'
     n = outcome.alerts_sent
     text = f'Checked "{search.name}": {n} new {"alert" if n == 1 else "alerts"} posted.'
-    failed = [r for r in outcome.results if not r.ok]
-    errors = [r.error or "" for r in failed] + ([outcome.error] if outcome.error else [])
-    if failed:
-        text += f" {_names([r.source for r in failed])} didn't work ({'; '.join(errors)})"
+    if outcome.failed:
+        text += f" {_names(outcome.failed)} didn't work ({'; '.join(outcome.errors)})"
     elif outcome.error:
         text += f" {outcome.error}"
     return text

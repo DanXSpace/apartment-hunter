@@ -10,7 +10,7 @@ from apartment_hunter.models import Listing, Search
 from apartment_hunter.notifiers import ChannelGone, Notifier, NotifyError
 from apartment_hunter.sources import SOURCE_NAMES, ScrapeError, Source, SourcePage
 from apartment_hunter.storage import SourceHealth, Store
-from apartment_hunter.text import places_match
+from apartment_hunter.text import join_and, places_match
 
 log = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ def broken_text(source: str, search_name: str, streak: int, reason: str, working
     name = SOURCE_NAMES[source]
     text = f"⚠️ {name} hasn't worked for **{search_name}** in {streak} checks in a row: {reason}"
     if working:
-        names = " and ".join(SOURCE_NAMES[key] for key in working)
+        names = join_and([SOURCE_NAMES[key] for key in working])
         text += f" {names} {'is' if len(working) == 1 else 'are'} still being checked."
     return text
 
@@ -57,6 +57,11 @@ class SourceResult:
     more_pages: bool
     error: str | None
 
+    @property
+    def matches(self) -> int:
+        """How many places match: the Source's total when it shows one, else the Listings read."""
+        return self.total if self.total is not None else self.found
+
 
 @dataclass(frozen=True)
 class RunOutcome:
@@ -69,6 +74,26 @@ class RunOutcome:
     channel_gone: bool = False
     error: str | None = None
     superseded: bool = False
+
+    @property
+    def worked(self) -> list[str]:
+        """The Sources read successfully."""
+        return [r.source for r in self.results if r.ok]
+
+    @property
+    def failed(self) -> list[str]:
+        """The Sources that failed."""
+        return [r.source for r in self.results if not r.ok]
+
+    @property
+    def errors(self) -> list[str]:
+        """Each failed Source's reason, then the Run's own error, if any."""
+        return [r.error or "" for r in self.results if not r.ok] + ([self.error] if self.error else [])
+
+    @property
+    def matches(self) -> int:
+        """How many places match across the Sources that worked."""
+        return sum(r.matches for r in self.results if r.ok)
 
 
 class _Superseded(Exception):
@@ -197,8 +222,8 @@ class SearchRunner:
         elif before.broken_alert_sent:
             self._deliver(search, partial(notifier.send_text, recovered_text(key, search.name)))
         elif result.seeded and before.consecutive_failures:
-            matches = result.total if result.total is not None else result.found
-            self._deliver(search, partial(notifier.send_text, working_now_text(key, search.name, matches)))
+            message = working_now_text(key, search.name, result.matches)
+            self._deliver(search, partial(notifier.send_text, message))
 
     def _deliver(self, search: Search, send: Callable[[], None]) -> bool:
         """Send one message; False when Discord didn't accept it. ChannelGone propagates, and nothing

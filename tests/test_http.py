@@ -1,17 +1,6 @@
 from apartment_hunter.sources import BlockedError, ScrapeError
 from apartment_hunter.sources.http import PoliteHttpClient
-from fakes import FakeHttp
-
-
-class FakeClock:
-    def __init__(self) -> None:
-        self.now = 1000.0
-
-    def __call__(self) -> float:
-        return self.now
-
-    def advance(self, seconds: float) -> None:
-        self.now += seconds
+from fakes import FakeClock, FakeHttp
 
 
 def test_waits_out_the_gap_between_requests_to_the_same_host():

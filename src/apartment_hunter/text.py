@@ -1,6 +1,11 @@
-"""Small pieces of user-facing copy shared by the runner and the bot's replies."""
+"""Small pieces of text formatting shared by the Criteria, the Sources, the runner and the bot's replies."""
 
 from collections.abc import Sequence
+
+
+def plain_number(n: float) -> str:
+    """2 and 2.0 both read "2"; 1.5 stays "1.5"."""
+    return str(int(n)) if float(n).is_integer() else str(n)
 
 
 def places_match(n: int) -> str:

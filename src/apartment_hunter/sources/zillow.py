@@ -13,7 +13,7 @@ from scrapling.parser import Selector
 from apartment_hunter.criteria import Criteria, HomeType, Pets
 from apartment_hunter.models import Listing
 from apartment_hunter.sources import BlockedError, ScrapeError, SourcePage
-from apartment_hunter.sources.http import HttpClient
+from apartment_hunter.sources.http import HttpClient, raise_for_status
 
 SEARCH_URL = "https://www.zillow.com/homes/for_rent/"
 _SITE = "https://www.zillow.com"
@@ -169,10 +169,9 @@ class ZillowSource:
 
     def fetch(self, criteria: Criteria, page: int) -> SourcePage:
         response = self._http.get(search_url(criteria, page))
-        if response.status in (403, 429):
-            raise BlockedError(_BLOCKED)
-        if response.status != 200:
-            raise ScrapeError(f"Zillow answered with an error (HTTP {response.status}).")
+        raise_for_status(
+            response, blocked=_BLOCKED, failed=f"Zillow answered with an error (HTTP {response.status})."
+        )
         cards, total, has_more = parse_search_page(response.text, self._now())
         listings = [c.listing for c in cards if matches_home_type(c.home_type, criteria.home_type)]
         return SourcePage(listings, total, has_more)

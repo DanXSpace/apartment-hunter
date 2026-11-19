@@ -14,7 +14,7 @@ from apartment_hunter.areas import (
 from apartment_hunter.criteria import Area
 from apartment_hunter.sources import BlockedError, ScrapeError
 from apartment_hunter.sources.http import HttpResponse
-from fakes import FakeHttp
+from fakes import FakeClock, FakeHttp
 
 SUGGEST_BODY = json.dumps(
     {
@@ -57,17 +57,6 @@ SITES = [
     CraigslistSite("newyork", 40.7166, -74.0),
     CraigslistSite("milwaukee", 43.0389, -87.9065),
 ]
-
-
-class FakeClock:
-    def __init__(self) -> None:
-        self.now = 1000.0
-
-    def __call__(self) -> float:
-        return self.now
-
-    def advance(self, seconds: float) -> None:
-        self.now += seconds
 
 
 def test_only_cities_neighborhoods_and_zip_codes_are_offered():

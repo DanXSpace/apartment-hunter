@@ -11,8 +11,8 @@ from importlib import resources
 from typing import Any, Protocol
 
 from apartment_hunter.criteria import Area
-from apartment_hunter.sources import BlockedError, ScrapeError
-from apartment_hunter.sources.http import HttpClient
+from apartment_hunter.sources import ScrapeError
+from apartment_hunter.sources.http import HttpClient, raise_for_status
 
 ACCEPTED_KINDS = {"city": 6, "zipcode": 7, "neighborhood": 8}
 MIN_SUGGEST_CHARACTERS = 3
@@ -186,10 +186,7 @@ class AreaLookup:
             raise
         except Exception as error:
             raise ScrapeError(_LOOKUP_DOWN) from error
-        if response.status in (403, 429):
-            raise BlockedError(_LOOKUP_DOWN)
-        if response.status != 200:
-            raise ScrapeError(_LOOKUP_DOWN)
+        raise_for_status(response, blocked=_LOOKUP_DOWN, failed=_LOOKUP_DOWN)
         found = read_suggestions(response.text)
         with self._lock:
             self._cache[text.casefold()] = found

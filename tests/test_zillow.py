@@ -134,7 +134,12 @@ def test_fetch_drops_other_home_types_and_reports_the_page():
     page = ZillowSource(http, now=lambda: AT).fetch(Criteria(CHICAGO, home_type=HomeType.HOUSE), 1)
     assert [listing.listing_id for listing in page.listings] == ["9"]
     assert (page.total, page.has_more) == (2, False)
-    assert http.requested == [search_url(Criteria(CHICAGO, home_type=HomeType.HOUSE), 1)]
+    assert len(http.requested) == 1
+    state = query_state(http.requested[0])
+    assert state["regionSelection"] == [{"regionId": 17426, "regionType": 6}]
+    assert state["pagination"] == {}
+    assert set(state["filterState"]) - BASE_KEYS == {
+        "isApartment", "isCondo", "isTownhouse", "isMultiFamily", "isManufactured", "isLotLand"}
 
 
 @pytest.mark.parametrize("status", [403, 429])

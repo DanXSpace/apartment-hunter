@@ -9,8 +9,9 @@ from scrapling.parser import Selector
 
 from apartment_hunter.criteria import Criteria, HomeType, Pets
 from apartment_hunter.models import Listing
-from apartment_hunter.sources import BlockedError, ScrapeError, SourcePage
-from apartment_hunter.sources.http import HttpClient
+from apartment_hunter.sources import ScrapeError, SourcePage
+from apartment_hunter.sources.http import HttpClient, raise_for_status
+from apartment_hunter.text import plain_number
 
 # Craigslist's apartment, condo, flat, loft / cottage, duplex, house / townhouse.
 HOUSING_TYPES = {
@@ -26,10 +27,6 @@ _LAYOUT_CHANGED = (
 )
 
 
-def _plain(number: float) -> str:
-    return str(int(number)) if number == int(number) else str(number)
-
-
 def search_url(criteria: Criteria) -> str:
     area = criteria.area
     params: list[tuple[str, str]] = [
@@ -39,13 +36,13 @@ def search_url(criteria: Criteria) -> str:
         ("search_distance", str(area.craigslist_radius_miles)),
     ]
     if criteria.min_price is not None:
-        params.append(("min_price", _plain(criteria.min_price)))
+        params.append(("min_price", plain_number(criteria.min_price)))
     if criteria.max_price is not None:
-        params.append(("max_price", _plain(criteria.max_price)))
+        params.append(("max_price", plain_number(criteria.max_price)))
     if criteria.min_beds is not None:
-        params.append(("min_bedrooms", _plain(criteria.min_beds)))
+        params.append(("min_bedrooms", plain_number(criteria.min_beds)))
     if criteria.min_baths is not None:
-        params.append(("min_bathrooms", _plain(criteria.min_baths)))
+        params.append(("min_bathrooms", plain_number(criteria.min_baths)))
     if criteria.pets in (Pets.SMALL_DOGS, Pets.LARGE_DOGS):  # Craigslist has one dogs filter
         params.append(("pets_dog", "1"))
     elif criteria.pets is Pets.CATS:
@@ -94,8 +91,7 @@ class CraigslistSource:
         if page > 1:
             return SourcePage([], None, False)
         response = self._http.get(search_url(criteria))
-        if response.status in (403, 429):
-            raise BlockedError(_BLOCKED)
-        if response.status != 200:
-            raise ScrapeError(f"Craigslist answered with an error (HTTP {response.status}).")
+        raise_for_status(
+            response, blocked=_BLOCKED, failed=f"Craigslist answered with an error (HTTP {response.status})."
+        )
         return SourcePage(parse_search_page(response.text, self._now()), None, False)

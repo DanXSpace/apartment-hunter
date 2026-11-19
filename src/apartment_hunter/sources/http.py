@@ -7,13 +7,22 @@ from urllib.parse import urlsplit
 
 from curl_cffi import requests
 
-from apartment_hunter.sources import ScrapeError
+from apartment_hunter.sources import BlockedError, ScrapeError
 
 
 @dataclass(frozen=True)
 class HttpResponse:
     status: int
     text: str
+
+
+def raise_for_status(response: HttpResponse, *, blocked: str, failed: str) -> None:
+    """403 and 429 (bot protection, rate limits) raise BlockedError(blocked); any other status but 200
+    raises ScrapeError(failed)."""
+    if response.status in (403, 429):
+        raise BlockedError(blocked)
+    if response.status != 200:
+        raise ScrapeError(failed)
 
 
 class HttpClient(Protocol):
