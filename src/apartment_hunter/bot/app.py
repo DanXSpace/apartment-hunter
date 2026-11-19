@@ -50,6 +50,11 @@ PETS = [
     app_commands.Choice(name="Dogs", value=Pets.DOGS.value),
     app_commands.Choice(name="Cats", value=Pets.CATS.value),
 ]
+SOURCES = [
+    app_commands.Choice(name="Zillow and Craigslist", value="both"),
+    app_commands.Choice(name="Zillow only", value="zillow"),
+    app_commands.Choice(name="Craigslist only", value="craigslist"),
+]
 
 
 class _Bot(discord.Client):
@@ -163,9 +168,10 @@ def build_client(
         min_baths="Fewest bathrooms",
         home_type="Kind of place",
         pets="Pets that must be allowed",
+        sources="Where to look (both if you leave it out)",
         name="A name for this search (made from the criteria if you leave it out)",
     )
-    @app_commands.choices(home_type=HOME_TYPES, pets=PETS)
+    @app_commands.choices(home_type=HOME_TYPES, pets=PETS, sources=SOURCES)
     async def new(
         interaction: discord.Interaction,
         area: str,
@@ -175,6 +181,7 @@ def build_client(
         min_baths: app_commands.Range[float, 0, 10] | None = None,
         home_type: app_commands.Choice[str] | None = None,
         pets: app_commands.Choice[str] | None = None,
+        sources: app_commands.Choice[str] | None = None,
         name: app_commands.Range[str, 1, 60] | None = None,
     ) -> None:
         assert interaction.guild is not None and interaction.channel is not None  # guild_only
@@ -188,6 +195,7 @@ def build_client(
             home_type=HomeType(home_type.value) if home_type else HomeType.ANY,
             pets=Pets(pets.value) if pets else Pets.NONE,
             name=name,
+            sources=(sources.value,) if sources and sources.value != "both" else None,
         )
         await interaction.response.defer(thinking=True)
         try:
