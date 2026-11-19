@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from apartment_hunter.models import Listing
+from apartment_hunter.sources import SOURCE_NAMES
 
 GREEN = 0x57F287
 BLUE = 0x3498DB
@@ -27,11 +28,12 @@ def _price(v: float) -> str:
 
 
 def build_embed(listing: Listing, search_name: str, previous_price: int | None = None) -> dict:
+    source = SOURCE_NAMES.get(listing.source, listing.source)
     if previous_price is not None and listing.price_min is not None:
-        description = f"📉 **Price drop:** {_price(previous_price)} → {_price(listing.price_min)}"
+        description = f"📉 Price drop on {source}: {_price(previous_price)} → {_price(listing.price_min)}"
         color = BLUE
     else:
-        description = "New listing matches your search!"
+        description = f"New listing on {source}"
         color = GREEN
 
     price = _fmt_range(listing.price_min, listing.price_max, _price)
@@ -48,7 +50,8 @@ def build_embed(listing: Listing, search_name: str, previous_price: int | None =
             {"name": "🛁 Baths", "value": _fmt_range(listing.baths_min, listing.baths_max, _num),
              "inline": True},
         ],
-        "footer": {"text": f"{search_name} · {listing.scraped_at.strftime('%b %d, %Y %I:%M %p')}"},
+        "footer": {"text": search_name},
+        "timestamp": listing.scraped_at.isoformat(),
     }
     if listing.image_url:
         embed["image"] = {"url": listing.image_url}
