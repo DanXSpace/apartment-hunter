@@ -9,7 +9,11 @@ Criteria plus the channel its Alerts go to, identified by an id and belonging to
 _Avoid_: query, watch, filter
 
 **Criteria**:
-What a Search looks for: area, price range, beds, baths, home type, pets.
+What a Search looks for: Area, price range, beds, baths, home type, pets.
+
+**Area**:
+Where a Search looks: a city, neighborhood or ZIP code, resolved once to a Zillow region and the nearest Craigslist site.
+_Avoid_: location, region (except Zillow's own region)
 
 **Source**:
 A listing site the bot reads (Zillow, Craigslist).
@@ -36,6 +40,9 @@ _Avoid_: notification, ping
 **Health alert**:
 A message posted in the channel when a Source has failed several Runs in a row for a Search (it is **broken**), and again when it recovers. Counted per Source within a Search.
 _Avoid_: error alert
+
+**Owner alert**:
+The direct message the Owner gets when a Source has failed in every Search that uses it, and again when it recovers in a Search that has run it.
 
 **Blocked**:
 A request a Source's bot protection rejected; usually temporary.
