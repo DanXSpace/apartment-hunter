@@ -120,6 +120,29 @@ def test_suggest_needs_three_characters_caches_and_throttles():
     assert len(http.requested) == 2
 
 
+class InterruptingHttp(FakeHttp):
+    """While the first request is in flight, another autocomplete arrives and asks for suggestions."""
+
+    def __init__(self, response: str) -> None:
+        super().__init__(response)
+        self.lookup: AreaLookup | None = None
+        self.second: list[str] | None = None
+
+    def get(self, url: str) -> HttpResponse:
+        if self.lookup is not None and self.second is None:
+            self.second = self.lookup.suggest("Chica")
+        return super().get(url)
+
+
+def test_suggest_inside_the_gap_while_a_lookup_is_in_flight_makes_no_second_request():
+    http = InterruptingHttp(SUGGEST_BODY)
+    lookup = AreaLookup(http, SITES, clock=FakeClock(), min_gap_seconds=2)
+    http.lookup = lookup
+    assert lookup.suggest("Chi") == ["Lincoln Park, Chicago, IL", "Chicago, IL"]
+    assert http.second == []
+    assert len(http.requested) == 1
+
+
 class RaisingHttp:
     def get(self, url: str) -> HttpResponse:
         raise ScrapeError("Couldn't reach www.zillowstatic.com: timed out")

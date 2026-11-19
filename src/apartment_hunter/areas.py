@@ -2,6 +2,7 @@
 
 import json
 import math
+import threading
 import time
 import urllib.parse
 from collections.abc import Callable, Sequence
@@ -98,6 +99,12 @@ def nearest_craigslist_site(lat: float, lon: float, sites: Sequence[CraigslistSi
 
 
 class AreaLookup:
+    """Suggests and resolves places through Zillow's place lookup. Safe to call from several threads.
+
+    The lock guards only the cache and the throttle clock, never an HTTP request, so one slow
+    lookup doesn't hold up other autocompletes.
+    """
+
     def __init__(
         self,
         http: HttpClient,
@@ -111,17 +118,21 @@ class AreaLookup:
         self._min_gap_seconds = min_gap_seconds
         self._cache: dict[str, list[Place]] = {}
         self._last_request: float | None = None
+        self._lock = threading.Lock()
 
     def suggest(self, text: str) -> list[str]:
         text = text.strip()
         if len(text) < MIN_SUGGEST_CHARACTERS:
             return []
-        key = text.casefold()
-        if key in self._cache:
-            return [p.display for p in self._cache[key]]
-        now = self._clock()
-        if self._last_request is not None and now - self._last_request < self._min_gap_seconds:
-            return []
+        with self._lock:
+            cached = self._cache.get(text.casefold())
+            if cached is None:
+                now = self._clock()
+                if self._last_request is not None and now - self._last_request < self._min_gap_seconds:
+                    return []
+                self._last_request = now  # take the slot before letting go of the lock
+        if cached is not None:
+            return [p.display for p in cached]
         try:
             return [p.display for p in self._lookup(text)]
         except ScrapeError:
@@ -129,7 +140,10 @@ class AreaLookup:
 
     def resolve(self, text: str) -> Area:
         text = text.strip()
-        places = self._cache.get(text.casefold())
+        with self._lock:
+            places = self._cache.get(text.casefold())
+            if places is None:
+                self._last_request = self._clock()
         if places is None:
             places = self._lookup(text)
         if not places:
@@ -151,7 +165,7 @@ class AreaLookup:
         )
 
     def _lookup(self, text: str) -> list[Place]:
-        self._last_request = self._clock()
+        """One request to the place lookup, without the lock; the caller has already taken the slot."""
         try:
             response = self._http.get(suggestions_url(text))
         except ScrapeError:
@@ -163,5 +177,6 @@ class AreaLookup:
         if response.status != 200:
             raise ScrapeError(_LOOKUP_DOWN)
         places = parse_suggestions(response.text)
-        self._cache[text.casefold()] = places
+        with self._lock:
+            self._cache[text.casefold()] = places
         return places
