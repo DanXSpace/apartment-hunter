@@ -12,6 +12,8 @@ from apartment_hunter.areas import (
     suggestions_url,
 )
 from apartment_hunter.criteria import Area
+from apartment_hunter.sources import BlockedError, ScrapeError
+from apartment_hunter.sources.http import HttpResponse
 from fakes import FakeHttp
 
 SUGGEST_BODY = json.dumps(
@@ -115,4 +117,40 @@ def test_suggest_needs_three_characters_caches_and_throttles():
     assert lookup.suggest("Chi") == ["Lincoln Park, Chicago, IL", "Chicago, IL"]
     clock.advance(2)
     lookup.suggest("Chic")
+    assert len(http.requested) == 2
+
+
+class RaisingHttp:
+    def get(self, url: str) -> HttpResponse:
+        raise ScrapeError("Couldn't reach www.zillowstatic.com: timed out")
+
+
+def test_resolve_raises_when_the_lookup_fails_instead_of_saying_not_found():
+    lookup = AreaLookup(FakeHttp(HttpResponse(500, "oops")), SITES, clock=FakeClock())
+    with pytest.raises(ScrapeError, match="place lookup isn't answering") as failed:
+        lookup.resolve("Chicago, IL")
+    assert not isinstance(failed.value, AreaNotFound | BlockedError)
+
+
+def test_resolve_raises_blocked_on_403_and_429():
+    for status in (403, 429):
+        lookup = AreaLookup(FakeHttp(HttpResponse(status, "")), SITES, clock=FakeClock())
+        with pytest.raises(BlockedError):
+            lookup.resolve("Chicago, IL")
+
+
+def test_resolve_raises_when_the_http_layer_raises():
+    lookup = AreaLookup(RaisingHttp(), SITES, clock=FakeClock())
+    with pytest.raises(ScrapeError):
+        lookup.resolve("Chicago, IL")
+
+
+def test_suggest_returns_nothing_and_caches_nothing_when_the_lookup_fails():
+    http, clock = FakeHttp(HttpResponse(500, "oops")), FakeClock()
+    lookup = AreaLookup(http, SITES, clock=clock)
+    assert lookup.suggest("Chi") == []
+    clock.advance(2)
+    http.response = HttpResponse(200, SUGGEST_BODY)
+    assert lookup.suggest("Chi") == ["Lincoln Park, Chicago, IL", "Chicago, IL"]
+    assert lookup.suggest("Chi") == ["Lincoln Park, Chicago, IL", "Chicago, IL"]
     assert len(http.requested) == 2

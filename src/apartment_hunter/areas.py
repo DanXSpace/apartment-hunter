@@ -10,6 +10,7 @@ from importlib import resources
 from typing import Any, Protocol
 
 from apartment_hunter.criteria import Area
+from apartment_hunter.sources import BlockedError, ScrapeError
 from apartment_hunter.sources.http import HttpClient
 
 ACCEPTED_KINDS = {"city": 6, "zipcode": 7, "neighborhood": 8}
@@ -17,6 +18,7 @@ MIN_SUGGEST_CHARACTERS = 3
 CITY_RADIUS_MILES = 10
 SMALL_RADIUS_MILES = 2
 EARTH_RADIUS_MILES = 3958.8
+_LOOKUP_DOWN = "Zillow's place lookup isn't answering right now. Try again in a few minutes."
 
 
 @dataclass(frozen=True)
@@ -46,9 +48,7 @@ class Areas(Protocol):
 
 
 def suggestions_url(text: str) -> str:
-    return "https://www.zillowstatic.com/autocomplete/v3/suggestions?q=" + urllib.parse.quote(
-        text, safe=""
-    )
+    return "https://www.zillowstatic.com/autocomplete/v3/suggestions?q=" + urllib.parse.quote(text, safe="")
 
 
 def parse_suggestions(body: str) -> list[Place]:
@@ -122,7 +122,10 @@ class AreaLookup:
         now = self._clock()
         if self._last_request is not None and now - self._last_request < self._min_gap_seconds:
             return []
-        return [p.display for p in self._lookup(text)]
+        try:
+            return [p.display for p in self._lookup(text)]
+        except ScrapeError:
+            return []
 
     def resolve(self, text: str) -> Area:
         text = text.strip()
@@ -131,7 +134,7 @@ class AreaLookup:
             places = self._lookup(text)
         if not places:
             raise AreaNotFound(
-                f"I couldn't find a place called \"{text}\". "
+                f'I couldn\'t find a place called "{text}". '
                 'Try a city, neighborhood or ZIP code, like "Chicago, IL" or "60614".'
             )
         place = next((p for p in places if p.display.casefold() == text.casefold()), places[0])
@@ -149,8 +152,16 @@ class AreaLookup:
 
     def _lookup(self, text: str) -> list[Place]:
         self._last_request = self._clock()
-        response = self._http.get(suggestions_url(text))
-        places = parse_suggestions(response.text) if response.status == 200 else []
-        if response.status == 200:
-            self._cache[text.casefold()] = places
+        try:
+            response = self._http.get(suggestions_url(text))
+        except ScrapeError:
+            raise
+        except Exception as error:
+            raise ScrapeError(_LOOKUP_DOWN) from error
+        if response.status in (403, 429):
+            raise BlockedError(_LOOKUP_DOWN)
+        if response.status != 200:
+            raise ScrapeError(_LOOKUP_DOWN)
+        places = parse_suggestions(response.text)
+        self._cache[text.casefold()] = places
         return places
