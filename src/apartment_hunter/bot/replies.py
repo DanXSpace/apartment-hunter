@@ -87,6 +87,11 @@ def checked_reply(search: Search, outcome: RunOutcome | None) -> str:
     return text
 
 
+def first_check_cancelled_reply(search: Search) -> str:
+    """The end of /search new's reply when the Search was deleted before its Seeding run finished."""
+    return f'"{search.name}" was deleted before its first check finished.'
+
+
 def statuses_reply(statuses: list[SearchStatus], now: datetime) -> str:
     """The reply to /search list: one line per Search in this server."""
     if not statuses:

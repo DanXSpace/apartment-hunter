@@ -7,6 +7,7 @@ from apartment_hunter.bot.replies import (
     created_reply,
     deleted_reply,
     edited_reply,
+    first_check_cancelled_reply,
     help_reply,
     invite_url,
     paused_reply,
@@ -99,6 +100,11 @@ def test_paused_resumed_and_deleted_replies():
 def test_confirm_delete_reply_warns_it_cannot_be_undone():
     assert confirm_delete_reply(SEARCH) == (
         'Delete "Chicago 2BR" and everything it has seen? This can\'t be undone.')
+
+
+def test_first_check_cancelled_reply_says_the_search_was_deleted():
+    assert first_check_cancelled_reply(SEARCH) == (
+        '"Chicago 2BR" was deleted before its first check finished.')
 
 
 def test_checked_reply_counts_alerts_and_names_failed_sources():

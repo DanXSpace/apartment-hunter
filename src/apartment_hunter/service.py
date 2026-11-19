@@ -329,15 +329,21 @@ class SearchService:
             changes.pets or old.pets,
         )
         sources = search.sources if changes.sources is None else self._check_sources(changes.sources)
-        new_name = (changes.name or "").strip() or search.name
         reseed = criteria != old or sources != search.sources
+        chosen = (changes.name or "").strip()
+        # A Search still named after its criteria follows them, unless that name is taken here.
+        follows = not chosen and criteria != old and search.name == summarize(old)
+        new_name = chosen or (summarize(criteria) if follows else search.name)
         edited = replace(search, name=new_name, criteria=criteria, sources=sources)
         try:
             self.store.update_search(edited, reseed=reseed)
         except DuplicateName as error:
-            raise SearchError(
-                f'This server already has a search called "{new_name}". Pick another name with name:.'
-            ) from error
+            if not follows:
+                raise SearchError(
+                    f'This server already has a search called "{new_name}". Pick another name with name:.'
+                ) from error
+            edited = replace(edited, name=search.name)
+            self.store.update_search(edited, reseed=reseed)
         return edited, self._run_now(search.id) if reseed else None
 
     def pause(self, server_id: int, name: str) -> Search:
@@ -376,6 +382,12 @@ class SearchService:
         for search in searches:
             self._delete(search.id)
         return len(searches)
+
+    def keep_servers(self, server_ids: set[int]) -> int:
+        """The bot is in exactly these servers: delete the Searches of any other server (it was removed
+        while offline). Returns how many Searches were deleted."""
+        gone = {search.server_id for search in self.store.searches()} - server_ids
+        return sum(self.server_removed(server_id) for server_id in gone)
 
     def _delete(self, search_id: str) -> None:
         """Forget a Search everywhere; anyone waiting on its next Run stops waiting."""

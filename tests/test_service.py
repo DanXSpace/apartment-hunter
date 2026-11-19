@@ -358,3 +358,31 @@ def test_resume_after_the_channel_came_back_clears_the_reason(env):
     env.service.resume(1, "Home")
     assert env.service.statuses(1)[0].state == "Healthy"
     assert not env.scheduler.is_paused(search.id)
+
+
+def test_on_connect_searches_of_servers_the_bot_left_while_offline_are_deleted(env):
+    _, pending = env.service.create(1, 10, 99, NewSearch("Chicago, IL", name="A"), can_post=True)
+    env.service.create(2, 20, 99, NewSearch("Chicago, IL", name="B"), can_post=True)
+    env.service.create(3, 30, 99, NewSearch("Chicago, IL", name="C"), can_post=True)
+    assert env.service.keep_servers({2, 3, 4}) == 1
+    assert [s.name for s in env.store.searches()] == ["B", "C"]
+    assert pending.cancelled
+
+
+def test_a_criteria_edit_renames_a_search_still_named_after_its_criteria(env):
+    env.service.create(1, 10, 99, NewSearch("Chicago, IL", max_price=2400), can_post=True)
+    edited, _ = env.service.edit(1, "Chicago, IL · up to $2,400", SearchChanges(max_price=1800))
+    assert edited.name == "Chicago, IL · up to $1,800"
+    assert [s.name for s in env.store.searches(1)] == ["Chicago, IL · up to $1,800"]
+
+
+def test_a_criteria_edit_keeps_a_chosen_name_or_one_whose_new_summary_is_taken(env):
+    env.service.create(1, 10, 99, NewSearch("Chicago, IL", max_price=2400, name="Home"), can_post=True)
+    env.service.create(1, 10, 99, NewSearch("Chicago, IL", max_price=2400), can_post=True)
+    env.service.create(1, 10, 99, NewSearch("Chicago, IL", max_price=1800, name="Chicago, IL · up to $1,500"),
+                       can_post=True)
+    kept, _ = env.service.edit(1, "Home", SearchChanges(max_price=1800))
+    assert kept.name == "Home"
+    clash, pending = env.service.edit(1, "Chicago, IL · up to $2,400", SearchChanges(max_price=1500))
+    assert clash.name == "Chicago, IL · up to $2,400" and pending is not None
+    assert env.store.find_search(1, clash.name).criteria.max_price == 1500

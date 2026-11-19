@@ -18,6 +18,7 @@ from apartment_hunter.bot.replies import (
     created_reply,
     deleted_reply,
     edited_reply,
+    first_check_cancelled_reply,
     help_reply,
     invite_url,
     paused_reply,
@@ -52,7 +53,9 @@ PETS = [
 
 
 class _Bot(discord.Client):
-    def __init__(self, settings: BotSettings, on_first_ready: Callable[[], None]) -> None:
+    def __init__(
+        self, settings: BotSettings, service: SearchService, on_first_ready: Callable[[], None]
+    ) -> None:
         intents = discord.Intents.none()
         intents.guilds = True
         # The bot never joins voice, so discord.py's "voice will NOT be supported" warnings are noise.
@@ -60,6 +63,7 @@ class _Bot(discord.Client):
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
         self._settings = settings
+        self._service = service
         self._on_first_ready: Callable[[], None] | None = on_first_ready
         self.background: set[asyncio.Task[None]] = set()
 
@@ -76,6 +80,10 @@ class _Bot(discord.Client):
     async def on_ready(self) -> None:
         log.info("Connected to Discord as %s. Invite link: %s",
                  self.user, invite_url(self.application_id or 0))
+        # Removed from a server while offline: no on_guild_remove came, so clean up now.
+        deleted = await asyncio.to_thread(self._service.keep_servers, {guild.id for guild in self.guilds})
+        if deleted:
+            log.info("Deleted %d searches of servers the bot was removed from while offline", deleted)
         if self._on_first_ready is not None:
             on_first_ready, self._on_first_ready = self._on_first_ready, None
             on_first_ready()
@@ -141,7 +149,7 @@ def _can_post(interaction: discord.Interaction) -> bool:
 def build_client(
     service: SearchService, settings: BotSettings, on_first_ready: Callable[[], None]
 ) -> discord.Client:
-    bot = _Bot(settings, on_first_ready)
+    bot = _Bot(settings, service, on_first_ready)
     search = app_commands.Group(
         name="search", description="Find new rentals and get them posted here", guild_only=True
     )
@@ -194,9 +202,10 @@ def build_client(
         await interaction.edit_original_response(content=checking_reply(created))
         outcome = await asyncio.to_thread(pending.wait, FIRST_OUTCOME_WAIT_SECONDS)
         await interaction.edit_original_response(
-            content=created_reply(created, outcome, settings.interval_minutes)
+            content=first_check_cancelled_reply(created) if pending.cancelled
+            else created_reply(created, outcome, settings.interval_minutes)
         )
-        if outcome is None:
+        if not pending.done:
             task = asyncio.create_task(_post_when_done(bot, created, pending, settings.interval_minutes))
             bot.background.add(task)
             task.add_done_callback(bot.background.discard)
@@ -350,18 +359,21 @@ def build_client(
 
 
 async def _post_when_done(bot: discord.Client, search: Search, pending: Pending, interval: float) -> None:
-    """Post the reply to /search new in its channel once a slow first check finishes."""
-    # Deleting the Search (or the bot leaving its server) cancels the Pending, which ends this loop.
+    """Post the end of /search new's reply in its channel once a slow first check finishes, or once the
+    Search was deleted before it did (deleting cancels the Pending, which ends this loop)."""
     # Bounded waits, so a closing bot doesn't hold a thread.
     while not pending.done and not bot.is_closed():
         await asyncio.to_thread(pending.wait, LATE_OUTCOME_POLL_SECONDS)
     outcome = pending.wait(0)
-    if outcome is None:
+    if pending.cancelled:
+        text = first_check_cancelled_reply(search)
+    elif outcome is not None:
+        text = created_reply(search, outcome, interval)
+    else:
         return
     channel = bot.get_channel(search.channel_id)
     if isinstance(channel, discord.abc.Messageable):
         try:
-            await channel.send(created_reply(search, outcome, interval),
-                               allowed_mentions=discord.AllowedMentions.none())
+            await channel.send(text, allowed_mentions=discord.AllowedMentions.none())
         except discord.HTTPException:
             log.warning("[%s] Couldn't post the first check's result", search.name, exc_info=True)
