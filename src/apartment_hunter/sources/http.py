@@ -1,6 +1,6 @@
 import random
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Protocol
 from urllib.parse import urlsplit
@@ -32,9 +32,14 @@ class HttpClient(Protocol):
 class CurlHttpClient:
     """Plain HTTP with Chrome's TLS fingerprint, no browser."""
 
-    def __init__(self, timeout: float = 25.0, impersonate: str = "chrome") -> None:
+    def __init__(
+        self, timeout: float = 25.0, impersonate: str = "chrome", headers: Mapping[str, str] | None = None
+    ) -> None:
+        """`headers` replace Chrome's own on every request (e.g. a User-Agent a service asks for)."""
         self._timeout = timeout
-        self._session: requests.Session = requests.Session(impersonate=impersonate)  # type: ignore[arg-type]
+        self._session: requests.Session = requests.Session(  # type: ignore[call-overload]
+            impersonate=impersonate, headers=dict(headers or {})
+        )
 
     def get(self, url: str) -> HttpResponse:
         try:

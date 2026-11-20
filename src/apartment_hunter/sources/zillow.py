@@ -11,6 +11,7 @@ from urllib.parse import quote
 from scrapling.parser import Selector
 
 from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, SourceLocation
+from apartment_hunter.geo import distance_miles
 from apartment_hunter.models import Listing
 from apartment_hunter.sources import ALL_FILTERS, BlockedError, CantPlace, ScrapeError, SourcePage
 from apartment_hunter.sources.http import HttpClient, raise_for_status
@@ -19,6 +20,7 @@ SEARCH_URL = "https://www.zillow.com/homes/for_rent/"
 # Zillow's region types for the place kinds a Search accepts.
 ACCEPTED_KINDS = {"city": 6, "zipcode": 7, "neighborhood": 8}
 LOOKUP_DOWN = "Zillow's place lookup isn't answering right now. Try again in a few minutes."
+MAX_PLACE_MILES = 20  # a Zillow region farther than this from the Area is some other place
 _SITE = "https://www.zillow.com"
 
 _BASE_FILTERS: dict[str, Any] = {
@@ -120,10 +122,27 @@ def parse_suggestions(body: str) -> list[Place]:
     return read_suggestions(body).places
 
 
-def best_place(found: Suggestions, text: str) -> Place | None:
-    """The place called exactly `text` (any case), or else the top result when that is a place."""
-    exact = [p for p in found.places if p.display.casefold() == text.casefold()]
-    return exact[0] if exact else (found.places[0] if found.top_is_place else None)
+def place_query(area: Area) -> str:
+    """What to ask Zillow's place lookup for an Area: "Chicago, IL", "Lincoln Park, IL" or "60614".
+
+    Areas resolved by Photon read "Lincoln Park, IL, United States"; older ones "Chicago, IL"."""
+    parts = area.display.split(", ")
+    if len(parts) > 1 and parts[-1] == "United States":
+        parts = parts[:-1]
+    if area.kind == "zipcode" or len(parts) == 1:
+        return parts[0]
+    return f"{parts[0]}, {parts[-1]}"
+
+
+def nearby_place(found: Suggestions, area: Area, query: str) -> Place | None:
+    """The place called exactly `query`, or else the nearest place of the Area's kind (then of any
+    kind) within MAX_PLACE_MILES of the Area; None when Zillow offered nothing near it."""
+    near = [p for p in found.places if distance_miles(area.lat, area.lon, p.lat, p.lon) <= MAX_PLACE_MILES]
+    exact = [p for p in near if p.display.casefold() == query.casefold()]
+    if exact:
+        return exact[0]
+    same_kind = [p for p in near if p.kind == area.kind] or near
+    return min(same_kind, key=lambda p: distance_miles(area.lat, area.lon, p.lat, p.lon), default=None)
 
 
 def look_up_places(http: HttpClient, text: str) -> Suggestions:
@@ -251,7 +270,8 @@ class ZillowSource:
         self._lookup_http = lookup_http or http
 
     def place(self, area: Area) -> SourceLocation:
-        found = best_place(look_up_places(self._lookup_http, area.display), area.display)
+        query = place_query(area)
+        found = nearby_place(look_up_places(self._lookup_http, query), area, query)
         if found is None:
             raise CantPlace(f"Zillow doesn't know {area.display}.")
         return {"region_id": found.region_id, "region_type": ACCEPTED_KINDS[found.kind]}

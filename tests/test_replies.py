@@ -164,6 +164,14 @@ def test_checked_reply_counts_alerts_and_names_failed_sources():
         'Still checking "Chicago 2BR"; any alerts will show up in the channel.')
 
 
+def test_checked_reply_ends_with_the_filters_a_source_cannot_apply():
+    note = "Rightmove can't filter by pets, so you'll see all of its matches."
+    assert checked_reply(SEARCH, RunOutcome("s1", (ok("zillow", 3),), 0), (note,)) == (
+        f'Checked "Chicago 2BR": 0 new alerts posted. {note}')
+    assert checked_reply(SEARCH, None, (note,)) == (
+        f'Still checking "Chicago 2BR"; any alerts will show up in the channel. {note}')
+
+
 def test_not_in_test_server_reply_gives_the_invite_link():
     assert not_in_test_server_reply("https://example.test/invite") == (
         "The bot isn't in your test server yet. Invite it with: https://example.test/invite "

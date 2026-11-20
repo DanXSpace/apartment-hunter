@@ -600,3 +600,48 @@ def test_a_search_saved_before_countries_loads_as_us_and_does_not_reseed(env):
     assert env.zillow.locations == [{"region_id": 17426, "region_type": 6}]
     assert env.notifiers[10].listings == [("b", None)]
     assert env.service.statuses(1)[0].listings == 2
+
+
+def test_the_sources_choices_follow_the_country_of_the_area_being_typed(env, uk):
+    add_source(env, "craigslist")
+    assert env.service.source_choices(1, area=CAMDEN.display) == [
+        ("All sites", "all"), ("Rightmove", "rightmove")]
+    assert env.service.source_choices(1, area="Lincoln Park, IL, United States") == [
+        ("All sites", "all"), ("Zillow", "zillow"), ("Craigslist", "craigslist")]
+
+
+def test_with_no_area_typed_yet_the_sources_choices_offer_every_site(env, uk):
+    add_source(env, "craigslist")
+    assert env.service.source_choices(1, area=None) == [
+        ("All sites", "all"), ("Zillow", "zillow"), ("Craigslist", "craigslist"), ("Rightmove", "rightmove")]
+    assert env.service.source_choices(1, area="Lon") == env.service.source_choices(1, area=None)
+
+
+def test_editing_without_a_new_area_offers_the_sources_of_the_searchs_area(env, uk):
+    env.service.create(1, 10, 99, NewSearch(CAMDEN.display, name="Flat"), can_post=True)
+    assert env.service.source_choices(1, area=None, search="flat") == [
+        ("All sites", "all"), ("Rightmove", "rightmove")]
+    assert env.service.source_choices(1, area="Chicago, IL, United States", search="Flat") == [
+        ("All sites", "all"), ("Zillow", "zillow")]
+    assert env.service.source_choices(1, area=None, search="nope") == [
+        ("All sites", "all"), ("Zillow", "zillow"), ("Rightmove", "rightmove")]
+
+
+def test_the_sources_choices_narrow_to_what_is_typed_in_the_option(env, uk):
+    assert env.service.source_choices(1, area=None, current="RIGHT") == [("Rightmove", "rightmove")]
+
+
+def test_a_site_typed_by_name_instead_of_picked_works(env, uk):
+    search, _ = env.service.create(1, 10, 99, NewSearch(CAMDEN.display, sources=("Rightmove",)),
+                                   can_post=True)
+    assert search.sources == ("rightmove",)
+    search, _ = env.service.create(1, 10, 99, NewSearch("Chicago, IL", sources=("all sites",)),
+                                   can_post=True)
+    assert search.sources == ("zillow",)
+
+
+def test_check_notes_the_filters_a_source_cannot_apply(env, uk):
+    uk.filters = frozenset({Filter.PRICE})
+    env.service.create(1, 10, 99, NewSearch(CAMDEN.display, name="Flat", pets=Pets.CATS), can_post=True)
+    _, pending = env.service.check(1, "Flat")
+    assert pending.notes == ("Rightmove can't filter by pets, so you'll see all of its matches.",)

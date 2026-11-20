@@ -9,7 +9,7 @@ import os
 from dotenv import load_dotenv
 
 from apartment_hunter.appdata import LOG_FORMAT, AlreadyRunning, DataDir
-from apartment_hunter.areas import AreaLookup
+from apartment_hunter.areas import PHOTON_USER_AGENT, AreaLookup
 from apartment_hunter.bot.app import build_client
 from apartment_hunter.bot.posting import ChannelNotifier, DiscordBridge
 from apartment_hunter.countries import country
@@ -20,6 +20,7 @@ from apartment_hunter.settings import BotSettings, SettingsError, load_settings
 from apartment_hunter.sources import Source
 from apartment_hunter.sources.craigslist import CraigslistSource
 from apartment_hunter.sources.http import CurlHttpClient, PoliteHttpClient
+from apartment_hunter.sources.rightmove import RightmoveSource
 from apartment_hunter.sources.zillow import ZillowSource
 from apartment_hunter.storage import Store
 
@@ -27,7 +28,8 @@ log = logging.getLogger("apartment_hunter")
 
 DESCRIPTION = """\
 Run the Apartment Hunter Discord bot. People add it to their server and use /search to get new
-Zillow and Craigslist rentals posted in a channel (the sources option picks one site or both).
+rentals posted in a channel: Zillow and Craigslist in the US, Rightmove in the UK (the sources
+option picks one site or all of the area's country).
 
 Settings come from environment variables, or from a .env file in the project folder
 (see .env.example). DISCORD_TOKEN is required.
@@ -62,12 +64,13 @@ def _run(settings: BotSettings, data: DataDir) -> int:
     store = Store(data.database)
     run_http = PoliteHttpClient(CurlHttpClient())
     # Autocomplete must answer within Discord's 3 seconds, so lookups never wait behind polite gaps.
-    areas = AreaLookup(CurlHttpClient(timeout=2.5))
+    areas = AreaLookup(CurlHttpClient(timeout=2.5, headers={"User-Agent": PHOTON_USER_AGENT}))
     # Placing an Area happens once per create or Area edit, outside Runs, so it skips the polite gaps.
     place_http = CurlHttpClient()
     sources: dict[str, Source] = {
         "zillow": ZillowSource(run_http, lookup_http=place_http),
         "craigslist": CraigslistSource(run_http),
+        "rightmove": RightmoveSource(run_http, lookup_http=place_http),
     }
 
     # The lambdas look `bridge` and `service` up when called, after all of them exist.

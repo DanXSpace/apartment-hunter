@@ -12,7 +12,7 @@ _Avoid_: query, watch, filter
 What a Search looks for: Area, price range, beds, baths, home type, pets.
 
 **Area**:
-Where a Search looks: a city, neighborhood or ZIP code, resolved once to a country and a source location for each of its Sources.
+Where a Search looks: a city, neighborhood or postcode (ZIP code), resolved once to a country and a source location for each of its Sources.
 _Avoid_: location, region (except Zillow's own region)
 
 **Country**:
@@ -22,7 +22,7 @@ A supported country: its currency and its Sources. A Search's country is its Are
 What a Source needs to search an Area (a Zillow region, a Craigslist site and radius, a site's URL slug…), worked out once by the Source and saved with the Search.
 
 **Source**:
-A listing site the bot reads (Zillow, Craigslist).
+A listing site the bot reads (Zillow, Craigslist, Rightmove).
 _Avoid_: site, scraper
 
 **Listing**:

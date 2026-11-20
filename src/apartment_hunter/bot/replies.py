@@ -81,8 +81,13 @@ def deleted_reply(name: str) -> str:
     return f'Deleted "{name}".'
 
 
-def checked_reply(search: Search, outcome: RunOutcome | None) -> str:
-    """The reply to /search check once its Run finished (or None: it's still going)."""
+def checked_reply(search: Search, outcome: RunOutcome | None, notes: tuple[str, ...] = ()) -> str:
+    """The reply to /search check once its Run finished (or None: it's still going), ending with the
+    service's notes (filters a Source can't apply)."""
+    return _with_notes(_checked_text(search, outcome), notes)
+
+
+def _checked_text(search: Search, outcome: RunOutcome | None) -> str:
     if outcome is None:
         return f'Still checking "{search.name}"; any alerts will show up in the channel.'
     n = outcome.alerts_sent

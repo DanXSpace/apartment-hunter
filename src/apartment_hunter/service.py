@@ -31,6 +31,7 @@ NO_PERMISSION = (
 CHANNEL_GONE = "I can't post in its channel anymore (it was deleted or I lost permission)."
 OWNER_ALERT_STREAK = 3
 EVERY_SOURCE = "all"  # in `sources`: every Source of the Area's country
+ALL_SITES = "All sites"  # how the `sources` autocomplete names EVERY_SOURCE
 AT_TOTAL_LIMIT = (
     "The bot is watching as many searches as it can right now. Try again later, or ask whoever runs it."
 )
@@ -239,11 +240,30 @@ class SearchService:
         """The country's Sources that the bot has, in the countries table's order."""
         return tuple(key for key in country.sources if key in self.sources)
 
+    def source_choices(
+        self, server_id: int, area: str | None, search: str | None = None, current: str = ""
+    ) -> list[tuple[str, str]]:
+        """(label, value) pairs for the `sources` autocomplete: "All sites", then the Sources of the
+        country of the Area being typed (a suggestion ends with its country's name), else of the
+        Search's Area when editing `search`, else of every country. Narrowed to labels containing
+        `current`. Makes no place lookups."""
+        country = _country_named_in(area or "")
+        if country is None and search is not None:
+            found = self.store.find_search(server_id, search)
+            country = COUNTRIES.get(found.criteria.area.country) if found is not None else None
+        countries = [country] if country is not None else list(COUNTRIES.values())
+        keys = dict.fromkeys(key for c in countries for key in self._country_sources(c))
+        choices = [(ALL_SITES, EVERY_SOURCE)] + [(SOURCE_NAMES.get(key, key), key) for key in keys]
+        return [choice for choice in choices if current.casefold() in choice[0].casefold()]
+
     def _check_sources(self, sources: tuple[str, ...] | None, area: Area) -> tuple[str, ...]:
         """The Sources to use for `area` (None or EVERY_SOURCE: all of its country's); raises SearchError
-        for Sources the bot lacks or that belong to another country."""
+        for Sources the bot lacks or that belong to another country. A Source may be given by its
+        name ("Rightmove") as well as its key, since the option takes typed text."""
         country = COUNTRIES[area.country]
         valid = self._country_sources(country)
+        if sources is not None:
+            sources = tuple(_source_key(text) for text in sources)
         if sources is None or sources == (EVERY_SOURCE,):
             return valid
         available = ", ".join(SOURCE_NAMES.get(key, key) for key in valid)
@@ -284,6 +304,8 @@ class SearchService:
         """A note for each Source that can't apply some of the filters these Criteria set."""
         notes = []
         for key in sources:
+            if key not in self.sources:
+                continue
             missing = [f.value for f in filters_used(criteria) if f not in self.sources[key].filters]
             if missing:
                 notes.append(f"{SOURCE_NAMES.get(key, key)} can't filter by {' or '.join(missing)}, "
@@ -441,7 +463,7 @@ class SearchService:
                     f'You can check "{search.name}" again in {minutes} minute{"" if minutes == 1 else "s"}.'
                 )
         self._last_check[search.id] = now
-        return search, self._run_now(search.id)
+        return search, self._run_now(search.id, tuple(self._filter_notes(search.criteria, search.sources)))
 
     def server_removed(self, server_id: int) -> int:
         """The bot left a server: delete its Searches. Returns how many there were."""
@@ -483,6 +505,20 @@ class SearchService:
             raise SearchError(
                 f"I couldn't look up places right now: {error} Try again in a minute."
             ) from error
+
+
+def _country_named_in(area: str) -> Country | None:
+    """The country whose name ends `area` ("Camden Town, London, United Kingdom"), if any."""
+    last = area.rsplit(",", 1)[-1].strip().casefold()
+    return next((c for c in COUNTRIES.values() if c.name.casefold() == last), None)
+
+
+def _source_key(text: str) -> str:
+    """A Source key for a key or a name typed in any case; "All sites" is EVERY_SOURCE."""
+    typed = text.strip().casefold()
+    if typed == ALL_SITES.casefold():
+        return EVERY_SOURCE
+    return next((key for key, name in SOURCE_NAMES.items() if typed in (key, name.casefold())), text)
 
 
 def _limit[N: (int, float)](change: N | None, current: N | None) -> N | None:

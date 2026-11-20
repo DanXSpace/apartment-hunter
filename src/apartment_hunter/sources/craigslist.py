@@ -1,7 +1,6 @@
 """The Craigslist Source: Criteria into a newest-first apartment search, and its static list into Listings."""
 
 import json
-import math
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -12,6 +11,7 @@ from urllib.parse import urlencode
 from scrapling.parser import Selector
 
 from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, SourceLocation
+from apartment_hunter.geo import distance_miles
 from apartment_hunter.models import Listing
 from apartment_hunter.sources import ALL_FILTERS, ScrapeError, SourcePage
 from apartment_hunter.sources.http import HttpClient, raise_for_status
@@ -19,7 +19,6 @@ from apartment_hunter.text import plain_number
 
 CITY_RADIUS_MILES = 10
 SMALL_RADIUS_MILES = 2
-EARTH_RADIUS_MILES = 3958.8
 
 # Craigslist's apartment, condo, flat, loft / cottage, duplex, house / townhouse.
 HOUSING_TYPES = {
@@ -47,17 +46,8 @@ def load_craigslist_sites() -> list[CraigslistSite]:
     return [CraigslistSite(s["hostname"], s["lat"], s["lon"]) for s in json.loads(text)]
 
 
-def _distance_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    a = (
-        math.sin((p2 - p1) / 2) ** 2
-        + math.cos(p1) * math.cos(p2) * math.sin(math.radians(lon2 - lon1) / 2) ** 2
-    )
-    return 2 * EARTH_RADIUS_MILES * math.asin(math.sqrt(a))
-
-
 def nearest_craigslist_site(lat: float, lon: float, sites: Sequence[CraigslistSite]) -> str:
-    return min(sites, key=lambda s: _distance_miles(lat, lon, s.lat, s.lon)).hostname
+    return min(sites, key=lambda s: distance_miles(lat, lon, s.lat, s.lon)).hostname
 
 
 def search_url(criteria: Criteria) -> str:
