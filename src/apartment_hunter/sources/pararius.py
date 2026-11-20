@@ -38,6 +38,7 @@ _BLOCKED = (
     "This usually clears up on its own."
 )
 _LAYOUT_CHANGED = "Pararius's page layout changed, so listings couldn't be read. The bot needs an update."
+NEWEST_FIRST = "published_at.desc"  # the sort Pararius selects by default ("Newest first")
 NO_MAXIMUM = 60000  # how Pararius writes a price range with no maximum ("2000-60000")
 
 
@@ -131,11 +132,19 @@ def _searched(page: Selector, attribute: str) -> dict[str, Any]:
     return found
 
 
+def _selected_sort(page: Selector) -> str | None:
+    """The sort the results list says it uses ("published_at.desc"); None when it shows none."""
+    selected = page.css('select[name="search-list-sorting"] option[selected]')
+    return str(selected[0].attrib.get("value")) if selected else None
+
+
 def parse_search_page(
     html: str, scraped_at: datetime, location: SourceLocation, page_number: int
 ) -> SourcePage:
     """The results list's Listings, newest first. Highlighted cards are paid adverts pinned to the top
-    in any order, so they're left out.
+    in any order, so they're left out. The search takes no sort, so the page must say it sorted newest
+    first (Pararius's default); otherwise the layout changed rather than the Listings coming in the
+    wrong order.
 
     Pararius quietly widens a search it has nothing for: a district (or city area, neighbourhood) with
     no matches answers with the whole city's, and a page past the last one with page 1. Those answers
@@ -154,6 +163,8 @@ def parse_search_page(
                     if not item.css(".listing-search-item--featured")]
     except (ValueError, KeyError, TypeError, AttributeError, IndexError) as error:
         raise ScrapeError(_LAYOUT_CHANGED) from error
+    if listings and _selected_sort(page) != NEWEST_FIRST:
+        raise ScrapeError(_LAYOUT_CHANGED)
     total = _whole_number(_text(page, ".search-list-header__count"))
     return SourcePage(listings, total, bool(page.css("a.pagination__link--next")))
 

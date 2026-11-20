@@ -104,14 +104,20 @@ def test_lazy_loaded_photos_are_read_from_their_template(fixture_html):
         "https://casco-media-prod.global.ssl.fastly.net/listings/api/media/0b5f351b-")
 
 
-def pararius_page(cards: list[str], count: int, filters: dict, page: int = 1, next_page: bool = False) -> str:
-    """A results page shaped like Pararius's: the search it ran on <body>, the count, cards, pagination."""
+def pararius_page(cards: list[str], count: int, filters: dict, page: int = 1, next_page: bool = False,
+                  sort: str | None = "published_at.desc") -> str:
+    """A results page shaped like Pararius's: the search it ran on <body>, the count, the sort it
+    selected (None: no sort control), cards, pagination."""
     searched = html.escape(json.dumps({"filters": {"type": "for_rent", **filters}}))
     view = html.escape(json.dumps({"view_options": {"view": "list", "page": page}}))
     items = "".join(f'<li class="search-list__item search-list__item--listing">{card}</li>' for card in cards)
     more = '<a class="pagination__link pagination__link--next" href="/next">Next</a>' if next_page else ""
+    options = "".join(f'<option value="{value}"{" selected=\"selected\"" if value == sort else ""}>{label}'
+                      "</option>" for value, label in [("published_at.desc", "Newest first"),
+                                                       ("price.asc", "Lowest price first")])
+    sorting = f'<select name="search-list-sorting">{options}</select>' if sort is not None else ""
     return (f'<html><body data-search-page-view-options="{view}" data-search-page-filters="{searched}">'
-            f'<span class="search-list-header__count">{count}</span>'
+            f'<span class="search-list-header__count">{count}</span>{sorting}'
             f'<ul class="search-list__list">{items}</ul>'
             f'<wc-pagination class="pagination">{more}</wc-pagination></body></html>')
 
@@ -150,6 +156,14 @@ def test_an_empty_district_widened_to_the_whole_city_is_zero_matches():
     widened = pararius_page([card()], 4, {"city": "amsterdam"})
     page = source(widened)[0].fetch(Criteria(DE_PIJP), 1)
     assert (page.listings, page.total, page.has_more) == ([], 0, False)
+
+
+@pytest.mark.parametrize("sort", ["price.asc", None])
+def test_a_page_not_sorted_newest_first_is_a_layout_change(sort):
+    """Pararius's search takes no sort; it sorts newest first by default. If that default changes (or
+    the page stops saying), the Run fails loudly instead of alerting in the wrong order."""
+    with pytest.raises(ScrapeError, match="Pararius's page layout changed"):
+        source(pararius_page([card()], 1, PIJP_SEARCHED, sort=sort))[0].fetch(Criteria(DE_PIJP), 1)
 
 
 def test_zero_matches_is_an_empty_page_not_an_error():
