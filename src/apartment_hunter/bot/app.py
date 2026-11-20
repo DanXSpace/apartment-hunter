@@ -296,8 +296,8 @@ def build_client(
             min_baths=min_baths,
             home_type=HomeType(home_type.value) if home_type else None,
             pets=Pets(pets.value) if pets else None,
-            # None leaves the sites unchanged; EVERY_SOURCE ("All sites") picks every site of the Area's
-            # country.
+            # None leaves the Sources unchanged; EVERY_SOURCE ("All sites") picks every Source of the
+            # Area's country.
             sources=(sources,) if sources else None,
             name=name,
         )

@@ -38,7 +38,7 @@ _LAYOUT_CHANGED = "Idealista's page layout changed, so listings couldn't be read
 
 
 @dataclass(frozen=True)
-class IdealistaSite:
+class IdealistaConfig:
     """One country's Idealista: its address and the words its URLs and cards use.
 
     `rooms` and `baths` are the site's options as (count, segment), lowest first; each option means
@@ -68,7 +68,7 @@ class IdealistaSite:
         return ALL_FILTERS if self.pets else ALL_FILTERS - {Filter.PETS}
 
 
-ITALY = IdealistaSite(
+ITALY = IdealistaConfig(
     key="idealista_it", host="www.idealista.it", path="aree/affitto-case", with_word="con", page_word="lista",
     order=("ordine", "pubblicazione-desc"), max_price="prezzo_{}", min_price="prezzo-min_{}",
     home_types={HomeType.APARTMENT_CONDO: "appartamenti", HomeType.HOUSE: "ville",
@@ -82,7 +82,7 @@ ITALY = IdealistaSite(
 # idealista.pt offers no publication-date sort: its sort menu (in the saved Alcântara page) has
 # "Mais recentes"/"Mais antigos" as atualizado-desc/-asc where idealista.it has pubblicazione-desc/-asc,
 # plus price, floor and price-drop sorts. So Portugal sorts by last update, the nearest to newest first.
-PORTUGAL = IdealistaSite(
+PORTUGAL = IdealistaConfig(
     key="idealista_pt", host="www.idealista.pt", path="areas/arrendar-casas", with_word="com",
     page_word="pagina", order=("ordem", "atualizado-desc"),
     max_price="preco-max_{}", min_price="preco-min_{}",
@@ -136,71 +136,71 @@ def _at_least(options: tuple[tuple[int, str], ...], count: int) -> list[str]:
     return [segment for n, segment in options if n >= count] or [options[-1][1]]
 
 
-def search_url(site: IdealistaSite, criteria: Criteria, page: int = 1) -> str:
-    location = criteria.area.locations[site.key]
+def search_url(config: IdealistaConfig, criteria: Criteria, page: int = 1) -> str:
+    location = criteria.area.locations[config.key]
     segments = []
     if criteria.max_price is not None:
-        segments.append(site.max_price.format(criteria.max_price))
+        segments.append(config.max_price.format(criteria.max_price))
     if criteria.min_price is not None:
-        segments.append(site.min_price.format(criteria.min_price))
-    if criteria.home_type in site.home_types:
-        segments.append(site.home_types[criteria.home_type])
+        segments.append(config.min_price.format(criteria.min_price))
+    if criteria.home_type in config.home_types:
+        segments.append(config.home_types[criteria.home_type])
     if criteria.min_beds is not None and criteria.min_beds > 0:  # a studio minimum filters nothing out
-        segments += _at_least(site.rooms, math.ceil(criteria.min_beds) + site.rooms_offset)
+        segments += _at_least(config.rooms, math.ceil(criteria.min_beds) + config.rooms_offset)
     if criteria.min_baths is not None and math.floor(criteria.min_baths) > 1:  # round down; 1+ is anything
-        segments += _at_least(site.baths, math.floor(criteria.min_baths))
-    if site.pets and criteria.pets is not Pets.NONE:
-        segments.append(site.pets)
-    path = f"https://{site.host}/{site.path}/"
+        segments += _at_least(config.baths, math.floor(criteria.min_baths))
+    if config.pets and criteria.pets is not Pets.NONE:
+        segments.append(config.pets)
+    path = f"https://{config.host}/{config.path}/"
     if segments:
-        path += f"{site.with_word}-{','.join(segments)}/"
+        path += f"{config.with_word}-{','.join(segments)}/"
     if page > 1:
-        path += f"{site.page_word}-{page}"
+        path += f"{config.page_word}-{page}"
     shape = quote(f"(({location['shape']}))", safe="")
-    return f"{path}?shape={shape}&{site.order[0]}={site.order[1]}"
+    return f"{path}?shape={shape}&{config.order[0]}={config.order[1]}"
 
 
-def _split_title(site: IdealistaSite, title: str) -> tuple[str, str]:
+def _split_title(config: IdealistaConfig, title: str) -> tuple[str, str]:
     """"Trilocale in Via Roma, Roma" → ("Trilocale", "Via Roma, Roma"); a title without an address is
     all name."""
-    words = "|".join(re.escape(word) for word in site.separators)
+    words = "|".join(re.escape(word) for word in config.separators)
     match = re.match(rf"(.+?) (?:{words}) (.+)", title)
     return (match[1], match[2]) if match else (title, "")
 
 
-def _price(site: IdealistaSite, text: str) -> int | None:
+def _price(config: IdealistaConfig, text: str) -> int | None:
     """"1.600 €/mese" → 1600; a price on request or for another period → None."""
     digits = text.split("€")[0].replace(".", "").strip()
-    if not digits.isdigit() or not any(text.endswith(period) for period in site.monthly):
+    if not digits.isdigit() or not any(text.endswith(period) for period in config.monthly):
         return None
     return int(digits)
 
 
-def _beds(site: IdealistaSite, details: list[str]) -> float | None:
+def _beds(config: IdealistaConfig, details: list[str]) -> float | None:
     """Bedrooms from the card's room count: "3 locali" is 2 bedrooms, "T2" is 2."""
     for detail in details:
-        match = re.fullmatch(site.rooms_pattern, detail.strip())
+        match = re.fullmatch(config.rooms_pattern, detail.strip())
         if match:
-            return float(max(int(match[1]) - site.rooms_offset, 0))
+            return float(max(int(match[1]) - config.rooms_offset, 0))
     return None
 
 
-def _listing(site: IdealistaSite, card: Selector, scraped_at: datetime) -> Listing:
+def _listing(config: IdealistaConfig, card: Selector, scraped_at: datetime) -> Listing:
     link = card.css("a.item-link")[0]
     title = " ".join(str(link.attrib.get("title") or link.text).split())
-    name, address = _split_title(site, title)
-    price = _price(site, str(card.css(".item-price")[0].attrib.get("data-price") or ""))
-    beds = _beds(site, [str(detail.text) for detail in card.css(".item-detail")])
+    name, address = _split_title(config, title)
+    price = _price(config, str(card.css(".item-price")[0].attrib.get("data-price") or ""))
+    beds = _beds(config, [str(detail.text) for detail in card.css(".item-detail")])
     images = card.css(".item-gallery img")
     return Listing(
-        source=site.key, listing_id=str(card.attrib["data-element-id"]),
-        url=f"https://{site.host}{link.attrib['href']}".split("#")[0], name=name, address=address,
+        source=config.key, listing_id=str(card.attrib["data-element-id"]),
+        url=f"https://{config.host}{link.attrib['href']}".split("#")[0], name=name, address=address,
         price_min=price, price_max=price, beds_min=beds, beds_max=beds, baths_min=None, baths_max=None,
         image_url=str(images[0].attrib["src"]) if images else None, scraped_at=scraped_at,
     )
 
 
-def parse_search_page(site: IdealistaSite, html: str, scraped_at: datetime) -> SourcePage:
+def parse_search_page(config: IdealistaConfig, html: str, scraped_at: datetime) -> SourcePage:
     """The results list's Listings, newest first. Highlighted cards are kept: on a newest-first page
     they sit in their own place. The total is the heading's leading number ("3.463 case in affitto");
     a no-matches heading has none."""
@@ -211,7 +211,7 @@ def parse_search_page(site: IdealistaSite, html: str, scraped_at: datetime) -> S
             raise BlockedError(_BLOCKED)
         raise ScrapeError(_LAYOUT_CHANGED)
     try:
-        listings = [_listing(site, card, scraped_at) for card in page.css("article.item[data-element-id]")]
+        listings = [_listing(config, card, scraped_at) for card in page.css("article.item[data-element-id]")]
     except (ValueError, KeyError, TypeError, AttributeError, IndexError) as error:
         raise ScrapeError(_LAYOUT_CHANGED) from error
     count = re.match(r"\s*([\d.]+)", str(heading[0].text))
@@ -224,12 +224,15 @@ class IdealistaSource:
     request and never fails."""
 
     def __init__(
-        self, site: IdealistaSite, http: HttpClient, now: Callable[[], datetime] = lambda: datetime.now(UTC)
+        self,
+        config: IdealistaConfig,
+        http: HttpClient,
+        now: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
-        self.key = site.key
-        self.filters = site.filters
+        self.key = config.key
+        self.filters = config.filters
         self.home_type_notes = NO_HOME_TYPE_NOTES
-        self._site = site
+        self._config = config
         self._http = http
         self._now = now
 
@@ -237,12 +240,12 @@ class IdealistaSource:
         return {"shape": area_shape(area)}
 
     def results_url(self, criteria: Criteria) -> str:
-        return search_url(self._site, criteria, 1)
+        return search_url(self._config, criteria, 1)
 
     def fetch(self, criteria: Criteria, page: int) -> SourcePage:
-        response = self._http.get(search_url(self._site, criteria, page))
+        response = self._http.get(search_url(self._config, criteria, page))
         # Idealista answers a search with no matches with HTTP 404 and its usual results page.
         if not (response.status == 404 and "h1-container__text" in response.text):
             failed = f"Idealista answered with an error (HTTP {response.status})."
             raise_for_status(response, blocked=_BLOCKED, failed=failed)
-        return parse_search_page(self._site, response.text, self._now())
+        return parse_search_page(self._config, response.text, self._now())

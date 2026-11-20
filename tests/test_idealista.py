@@ -8,7 +8,7 @@ from apartment_hunter.criteria import Area, Criteria, HomeType, Pets
 from apartment_hunter.models import Listing
 from apartment_hunter.sources import SOURCE_NAMES, BlockedError, Filter, ScrapeError
 from apartment_hunter.sources.http import HttpResponse
-from apartment_hunter.sources.idealista import ITALY, PORTUGAL, IdealistaSite, IdealistaSource
+from apartment_hunter.sources.idealista import ITALY, PORTUGAL, IdealistaConfig, IdealistaSource
 from conftest import AT
 from fakes import FakeHttp
 
@@ -23,9 +23,9 @@ ALCANTARA = Area("Alcântara, Lisbon, Portugal", "neighborhood", "PT", 38.706, -
                  locations={"idealista_pt": {"shape": ALCANTARA_SHAPE}})
 
 
-def source(site: IdealistaSite, response: HttpResponse | str = "") -> tuple[IdealistaSource, FakeHttp]:
+def source(config: IdealistaConfig, response: HttpResponse | str = "") -> tuple[IdealistaSource, FakeHttp]:
     http = FakeHttp(response)
-    return IdealistaSource(site, http, now=lambda: AT), http
+    return IdealistaSource(config, http, now=lambda: AT), http
 
 
 def path_and_query(url: str) -> tuple[str, list[tuple[str, str]]]:
@@ -89,7 +89,7 @@ def test_portuguese_filters_and_later_pages():
         "t2,t3,t4-t5,banho-3/pagina-2")
 
 
-@pytest.mark.parametrize("site,area,beds,rooms", [
+@pytest.mark.parametrize("config,area,beds,rooms", [
     (ITALY, TRASTEVERE, 0, ""),  # a studio minimum filters nothing out
     (ITALY, TRASTEVERE, 1, "con-bilocali-2,trilocali-3,quadrilocali-4,5-locali-o-piu/"),
     (ITALY, TRASTEVERE, 3, "con-quadrilocali-4,5-locali-o-piu/"),
@@ -100,8 +100,8 @@ def test_portuguese_filters_and_later_pages():
     (PORTUGAL, ALCANTARA, 1, "com-t1,t2,t3,t4-t5/"),  # T1 is one bedroom
     (PORTUGAL, ALCANTARA, 5, "com-t4-t5/"),
 ])
-def test_bedrooms_become_rooms_in_italy_and_t_numbers_in_portugal(site, area, beds, rooms):
-    url = source(site)[0].results_url(Criteria(area, min_beds=beds))
+def test_bedrooms_become_rooms_in_italy_and_t_numbers_in_portugal(config, area, beds, rooms):
+    url = source(config)[0].results_url(Criteria(area, min_beds=beds))
     assert urlsplit(url).path.endswith("/" + rooms)
 
 
@@ -111,14 +111,14 @@ def test_bathroom_minimums(baths, segment):
     assert urlsplit(url).path == "/aree/affitto-case/" + segment
 
 
-@pytest.mark.parametrize("site,area,home_type,segment", [
+@pytest.mark.parametrize("config,area,home_type,segment", [
     (ITALY, TRASTEVERE, HomeType.HOUSE, "ville"),
     (ITALY, TRASTEVERE, HomeType.TOWNHOME, "villette-a-schiera"),
     (PORTUGAL, ALCANTARA, HomeType.APARTMENT_CONDO, "apartamentos"),
     (PORTUGAL, ALCANTARA, HomeType.TOWNHOME, "moradias-em-banda"),
 ])
-def test_home_types(site, area, home_type, segment):
-    url = source(site)[0].results_url(Criteria(area, home_type=home_type))
+def test_home_types(config, area, home_type, segment):
+    url = source(config)[0].results_url(Criteria(area, home_type=home_type))
     assert urlsplit(url).path.endswith(f"-{segment}/")
 
 
@@ -164,10 +164,10 @@ def test_parses_a_saved_real_portuguese_page(fixture_html):
     assert (listings["35369412"].beds_min, listings["35369412"].price_min) == (1, 1650)
 
 
-@pytest.mark.parametrize("site,area,fixture", [(ITALY, TRASTEVERE, "idealista_it/no_matches.html"),
+@pytest.mark.parametrize("config,area,fixture", [(ITALY, TRASTEVERE, "idealista_it/no_matches.html"),
                                                (PORTUGAL, ALCANTARA, "idealista_pt/no_matches.html")])
-def test_zero_matches_is_an_empty_page_although_idealista_answers_404(site, area, fixture, fixture_html):
-    page = source(site, HttpResponse(404, fixture_html(fixture)))[0].fetch(Criteria(area, max_price=200), 1)
+def test_zero_matches_is_an_empty_page_although_idealista_answers_404(config, area, fixture, fixture_html):
+    page = source(config, HttpResponse(404, fixture_html(fixture)))[0].fetch(Criteria(area, max_price=200), 1)
     assert (page.listings, page.total, page.has_more) == ([], 0, False)
 
 
