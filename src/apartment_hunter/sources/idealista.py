@@ -79,6 +79,9 @@ ITALY = IdealistaSite(
     baths=((1, "bagno-1"), (2, "bagno-2"), (3, "bagno-3")), pets="animali",
     separators=("in",), monthly=("€/mese",),
 )
+# idealista.pt offers no publication-date sort: its sort menu (in the saved Alcântara page) has
+# "Mais recentes"/"Mais antigos" as atualizado-desc/-asc where idealista.it has pubblicazione-desc/-asc,
+# plus price, floor and price-drop sorts. So Portugal sorts by last update, the nearest to newest first.
 PORTUGAL = IdealistaSite(
     key="idealista_pt", host="www.idealista.pt", path="areas/arrendar-casas", with_word="com",
     page_word="pagina", order=("ordem", "atualizado-desc"),
