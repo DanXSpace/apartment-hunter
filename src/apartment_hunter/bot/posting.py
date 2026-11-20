@@ -71,14 +71,16 @@ class DiscordBridge:
 
 
 class ChannelNotifier:
-    """The Notifier for one Search: posts its Alerts in its channel."""
+    """The Notifier for one Search: posts its Alerts in its channel, prices in its country's currency."""
 
-    def __init__(self, bridge: DiscordBridge, channel_id: int) -> None:
+    def __init__(self, bridge: DiscordBridge, channel_id: int, currency: str = "$") -> None:
         self._bridge = bridge
         self._channel_id = channel_id
+        self._currency = currency
 
     def send_listing(self, listing: Listing, search_name: str, previous_price: int | None = None) -> None:
-        self._bridge.post(self._channel_id, embed=build_embed(listing, search_name, previous_price))
+        embed = build_embed(listing, search_name, previous_price, currency=self._currency)
+        self._bridge.post(self._channel_id, embed=embed)
 
     def send_text(self, message: str) -> None:
         self._bridge.post(self._channel_id, content=message)

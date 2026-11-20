@@ -1,4 +1,5 @@
 from collections import defaultdict
+from dataclasses import replace
 from datetime import timedelta
 from itertools import count
 from types import SimpleNamespace
@@ -15,9 +16,12 @@ from apartment_hunter.storage import Store
 from conftest import AT, CHICAGO, make_listing, make_search
 from fakes import MINUTE, FakeClock, FakeNotifier, FakeSource
 
+UNPLACED_CHICAGO = replace(CHICAGO, locations={})
+
 
 class FakeAreas:
-    """Knows only "Chicago, IL"; anything else isn't a place. `down` makes every lookup fail."""
+    """Knows only "Chicago, IL" (not yet placed on any Source); anything else isn't a place.
+    `down` makes every lookup fail."""
 
     def __init__(self):
         self.down: ScrapeError | None = None
@@ -29,7 +33,7 @@ class FakeAreas:
         if self.down:
             raise self.down
         if text == "Chicago, IL":
-            return CHICAGO
+            return UNPLACED_CHICAGO
         raise AreaNotFound(f'I couldn\'t find a place called "{text}".')
 
 
@@ -46,7 +50,7 @@ def env():
     areas = FakeAreas()
     dms: list[tuple[int, str]] = []
     service = SearchService(
-        store=store, runner=runner, scheduler=scheduler, areas=areas, source_keys=("zillow",),
+        store=store, runner=runner, scheduler=scheduler, areas=areas, sources={"zillow": zillow},
         clock=lambda: AT + timedelta(seconds=clock()), new_id=lambda: f"s{next(ids)}",
         direct_message=lambda user_id, text: dms.append((user_id, text)),
     )
@@ -63,6 +67,18 @@ def test_create_seeds_right_away_and_reports_the_count(env):
     assert search.name == "Chicago, IL · 2+ bd · up to $2,400 · small dogs"
     assert outcome.results[0].total == 214 and outcome.results[0].seeded
     assert env.notifiers[10].texts == [] and env.notifiers[10].listings == []
+
+
+def test_create_places_the_area_once_and_runs_search_by_the_saved_location(env):
+    env.zillow.pages = [[make_listing("a")], [make_listing("a")]]
+    search, _ = env.service.create(1, 10, 99, NewSearch("Chicago, IL"), can_post=True)
+    env.scheduler.run_pending()
+    env.clock.advance(15 * MINUTE)
+    env.scheduler.run_pending()
+    assert search.criteria.area.locations == {"zillow": {"at": "Chicago, IL"}}
+    assert env.zillow.placed == ["Chicago, IL"]
+    assert env.zillow.locations == [{"at": "Chicago, IL"}, {"at": "Chicago, IL"}]
+    assert env.store.get_search(search.id) == search
 
 
 def test_create_refuses_without_permission_and_saves_nothing(env):

@@ -1,7 +1,7 @@
-from apartment_hunter.criteria import Criteria
+from apartment_hunter.criteria import Area, Criteria, SourceLocation
 from apartment_hunter.models import Listing
 from apartment_hunter.notifiers import ChannelGone, NotifyError
-from apartment_hunter.sources import SourcePage
+from apartment_hunter.sources import ALL_FILTERS, CantPlace, SourcePage
 from apartment_hunter.sources.http import HttpResponse
 
 _OK = HttpResponse(200, "ok")
@@ -38,15 +38,30 @@ class FakeSource:
 
     Each item in `pages` is a `SourcePage`, a list of Listings (one page holding all of them, with
     nothing more), or an exception to raise.
+
+    `place` gives every Area the location {"at": <area display>} and records the Areas it placed;
+    set `cant_place` to a reason to refuse instead. `filters` is what it can filter by (all of it
+    unless a test narrows it). `locations` records the source location each `fetch` was given.
     """
 
     def __init__(self, key: str) -> None:
         self.key = key
+        self.filters = ALL_FILTERS
         self.pages: list[SourcePage | list[Listing] | Exception] = []
         self.requested: list[int] = []
+        self.placed: list[str] = []
+        self.cant_place: str | None = None
+        self.locations: list[SourceLocation | None] = []
+
+    def place(self, area: Area) -> SourceLocation:
+        self.placed.append(area.display)
+        if self.cant_place is not None:
+            raise CantPlace(self.cant_place)
+        return {"at": area.display}
 
     def fetch(self, criteria: Criteria, page: int) -> SourcePage:
         self.requested.append(page)
+        self.locations.append(criteria.area.locations.get(self.key))
         item = self.pages.pop(0)
         if isinstance(item, Exception):
             raise item

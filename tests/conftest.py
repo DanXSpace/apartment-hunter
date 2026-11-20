@@ -9,8 +9,14 @@ from apartment_hunter.models import Listing, Search
 FIXTURES = Path(__file__).parent / "fixtures"
 
 AT = datetime(2026, 11, 5, 12, 0, tzinfo=UTC)
-CHICAGO = Area("Chicago, IL", "city", 17426, 6, 41.8781, -87.6298, "chicago", 10)
-LINCOLN_PARK = Area("Lincoln Park, Chicago, IL", "neighborhood", 269590, 8, 41.9237, -87.6505, "chicago", 2)
+CHICAGO = Area("Chicago, IL", "city", "US", 41.8781, -87.6298, locations={
+    "zillow": {"region_id": 17426, "region_type": 6},
+    "craigslist": {"site": "chicago", "radius_miles": 10},
+})
+LINCOLN_PARK = Area("Lincoln Park, Chicago, IL", "neighborhood", "US", 41.9237, -87.6505, locations={
+    "zillow": {"region_id": 269590, "region_type": 8},
+    "craigslist": {"site": "chicago", "radius_miles": 2},
+})
 
 
 @pytest.fixture

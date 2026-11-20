@@ -6,18 +6,20 @@ import logging
 import math
 import random
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from uuid import uuid4
 
 from apartment_hunter.areas import AreaNotFound, Areas
+from apartment_hunter.countries import COUNTRIES, Country
 from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, summarize
 from apartment_hunter.models import Search
 from apartment_hunter.runner import RunOutcome, SearchRunner
 from apartment_hunter.scheduler import Scheduler
-from apartment_hunter.sources import SOURCE_NAMES, ScrapeError
+from apartment_hunter.sources import SOURCE_NAMES, CantPlace, ScrapeError, Source, filters_used
 from apartment_hunter.storage import DuplicateName, Store
+from apartment_hunter.text import join_and
 
 log = logging.getLogger(__name__)
 
@@ -28,6 +30,7 @@ NO_PERMISSION = (
 )
 CHANNEL_GONE = "I can't post in its channel anymore (it was deleted or I lost permission)."
 OWNER_ALERT_STREAK = 3
+EVERY_SOURCE = "all"  # in `sources`: every Source of the Area's country
 AT_TOTAL_LIMIT = (
     "The bot is watching as many searches as it can right now. Try again later, or ask whoever runs it."
 )
@@ -48,7 +51,8 @@ class SearchError(Exception):
 
 @dataclass(frozen=True)
 class NewSearch:
-    """What someone asked for in `/search new`. `sources=None` means every Source the bot has."""
+    """What someone asked for in `/search new`. `sources=None` (or EVERY_SOURCE) means every Source of
+    the Area's country."""
 
     area: str
     min_price: int | None = None
@@ -66,6 +70,8 @@ class SearchChanges:
     """What someone asked to change in `/search edit`; None leaves that part as it is.
 
     A minimum or maximum price, or a minimum of baths, of 0 removes it (beds 0 means "studio or bigger").
+    `sources=(EVERY_SOURCE,)` picks every Source of the Area's country; an Area in another country with
+    `sources=None` switches to that country's Sources.
     """
 
     area: str | None = None
@@ -94,9 +100,12 @@ class Pending:
     """Waits for the outcome of the first Run of a Search to finish after this Pending was created.
 
     If the Search is deleted first, the Pending is cancelled: waiting ends at once, with no outcome.
+    `notes` are plain-language sentences for the reply about the request itself: Sources left out
+    because they couldn't place the Area, and filters a Source can't apply.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, notes: tuple[str, ...] = ()) -> None:
+        self.notes = notes
         self._done = threading.Event()
         self._outcome: RunOutcome | None = None
         self._cancelled = False
@@ -137,7 +146,7 @@ class SearchService:
         runner: SearchRunner,
         scheduler: Scheduler,
         areas: Areas,
-        source_keys: tuple[str, ...],
+        sources: Mapping[str, Source],
         limits: Limits = DEFAULT_LIMITS,
         interval_minutes: float = 15,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
@@ -150,7 +159,7 @@ class SearchService:
         self.runner = runner
         self.scheduler = scheduler
         self.areas = areas
-        self.source_keys = source_keys
+        self.sources = sources
         self.limits = limits
         self.interval_minutes = interval_minutes
         self.clock = clock
@@ -226,17 +235,60 @@ class SearchService:
             "Fix the channel and use /search resume, or delete it with /search delete.",
         )
 
-    def _check_sources(self, sources: tuple[str, ...] | None) -> tuple[str, ...]:
-        """The Sources to use (None means all the bot has); raises SearchError for ones it lacks."""
-        if sources is None:
-            return self.source_keys
-        available = ", ".join(SOURCE_NAMES.get(key, key) for key in self.source_keys)
+    def _country_sources(self, country: Country) -> tuple[str, ...]:
+        """The country's Sources that the bot has, in the countries table's order."""
+        return tuple(key for key in country.sources if key in self.sources)
+
+    def _check_sources(self, sources: tuple[str, ...] | None, area: Area) -> tuple[str, ...]:
+        """The Sources to use for `area` (None or EVERY_SOURCE: all of its country's); raises SearchError
+        for Sources the bot lacks or that belong to another country."""
+        country = COUNTRIES[area.country]
+        valid = self._country_sources(country)
+        if sources is None or sources == (EVERY_SOURCE,):
+            return valid
+        available = ", ".join(SOURCE_NAMES.get(key, key) for key in valid)
         if not sources:
             raise SearchError(f"Pick at least one site to check: {available}.")
-        unknown = " or ".join(SOURCE_NAMES.get(key, key) for key in sources if key not in self.source_keys)
+        foreign = [key for key in sources if key in self.sources and key not in valid]
+        if foreign:
+            names = join_and([SOURCE_NAMES.get(key, key) for key in foreign])
+            raise SearchError(f"{names} can't search in {country.name}. Pick from: {available}.")
+        unknown = " or ".join(SOURCE_NAMES.get(key, key) for key in sources if key not in valid)
         if unknown:
             raise SearchError(f"I can't check {unknown} yet. Pick from: {available}.")
         return sources
+
+    def _place(self, area: Area, sources: tuple[str, ...]) -> tuple[Area, tuple[str, ...], list[str]]:
+        """Place `area` on each of `sources` that hasn't placed it yet. Returns the Area with their
+        source locations, the Sources that can search it, and a note for each one left out. Raises
+        SearchError when none can, or when a place lookup didn't answer."""
+        locations = dict(area.locations)
+        left_out: list[str] = []
+        for key in sources:
+            if key in locations:
+                continue
+            try:
+                locations[key] = self.sources[key].place(area)
+            except CantPlace as error:
+                left_out.append(f"{SOURCE_NAMES.get(key, key)} was left out: {error}")
+            except ScrapeError as error:
+                raise SearchError(
+                    f"I couldn't look up places right now: {error} Try again in a minute."
+                ) from error
+        placed = tuple(key for key in sources if key in locations)
+        if not placed:
+            raise SearchError(f"I can't search {area.display} on any site: {' '.join(left_out)}")
+        return replace(area, locations=locations), placed, left_out
+
+    def _filter_notes(self, criteria: Criteria, sources: tuple[str, ...]) -> list[str]:
+        """A note for each Source that can't apply some of the filters these Criteria set."""
+        notes = []
+        for key in sources:
+            missing = [f.value for f in filters_used(criteria) if f not in self.sources[key].filters]
+            if missing:
+                notes.append(f"{SOURCE_NAMES.get(key, key)} can't filter by {' or '.join(missing)}, "
+                             "so you'll see all of its matches.")
+        return notes
 
     def statuses(self, server_id: int) -> list[SearchStatus]:
         """This server's Searches with their status, oldest first."""
@@ -277,8 +329,8 @@ class SearchService:
     ) -> tuple[Search, Pending]:
         """Save a new Search and queue its Seeding run ahead of the schedule.
 
-        Checks, in order: posting permission, limits, Sources, area, name. Any refusal raises SearchError
-        and saves nothing.
+        Checks, in order: posting permission, limits, area, Sources (and placing the area on each), name.
+        Any refusal raises SearchError and saves nothing.
         """
         if not can_post:
             raise SearchError(NO_PERMISSION)
@@ -290,8 +342,8 @@ class SearchService:
             )
         if len(self.store.searches()) >= self.limits.total:
             raise SearchError(AT_TOTAL_LIMIT)
-        sources = self._check_sources(new.sources)
         area = self._resolve_area(new.area)
+        area, sources, left_out = self._place(area, self._check_sources(new.sources, area))
         # A minimum of 0 means no minimum, except beds, where 0 means "studio or bigger".
         criteria = Criteria(
             area, new.min_price or None, new.max_price, new.min_beds, new.min_baths or None,
@@ -310,7 +362,8 @@ class SearchService:
                 f'This server already has a search called "{name}". Pick another name with name:.'
             ) from error
         self.scheduler.add(search.id, first_delay=self.interval_minutes * 60)
-        return search, self._run_now(search.id)
+        notes = (*left_out, *self._filter_notes(criteria, sources))
+        return search, self._run_now(search.id, notes)
 
     def find(self, server_id: int, name: str) -> Search:
         """This server's Search called `name` (any case); raises SearchError when there's none."""
@@ -325,6 +378,10 @@ class SearchService:
         search = self.find(server_id, name)
         old = search.criteria
         area = self._resolve_area(changes.area) if changes.area is not None else old.area
+        requested = changes.sources
+        if requested is None:
+            requested = None if area.country != old.area.country else search.sources
+        area, sources, left_out = self._place(area, self._check_sources(requested, area))
         criteria = Criteria(
             area,
             _limit(changes.min_price, old.min_price),
@@ -334,7 +391,6 @@ class SearchService:
             changes.home_type or old.home_type,
             changes.pets or old.pets,
         )
-        sources = search.sources if changes.sources is None else self._check_sources(changes.sources)
         reseed = criteria != old or sources != search.sources
         chosen = (changes.name or "").strip()
         # A Search still named after its criteria follows them, unless that name is taken here.
@@ -350,7 +406,9 @@ class SearchService:
                 ) from error
             edited = replace(edited, name=search.name)
             self.store.update_search(edited, reseed=reseed)
-        return edited, self._run_now(search.id) if reseed else None
+        if not reseed:
+            return edited, None
+        return edited, self._run_now(search.id, (*left_out, *self._filter_notes(criteria, sources)))
 
     def pause(self, server_id: int, name: str) -> Search:
         """Stop a Search's scheduled Runs until it's resumed."""
@@ -408,9 +466,9 @@ class SearchService:
         for pending in waiting:
             pending.cancel()
 
-    def _run_now(self, search_id: str) -> Pending:
+    def _run_now(self, search_id: str, notes: tuple[str, ...] = ()) -> Pending:
         """Queue a Search ahead of the schedule; the Pending waits for that Run."""
-        pending = Pending()
+        pending = Pending(notes)
         with self._pending_lock:
             self._pending.setdefault(search_id, []).append(pending)
         self.scheduler.run_now(search_id)

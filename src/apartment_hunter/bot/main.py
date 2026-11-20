@@ -12,6 +12,7 @@ from apartment_hunter.appdata import LOG_FORMAT, AlreadyRunning, DataDir
 from apartment_hunter.areas import AreaLookup
 from apartment_hunter.bot.app import build_client
 from apartment_hunter.bot.posting import ChannelNotifier, DiscordBridge
+from apartment_hunter.countries import country
 from apartment_hunter.runner import SearchRunner
 from apartment_hunter.scheduler import Scheduler
 from apartment_hunter.service import Limits, SearchService
@@ -62,13 +63,19 @@ def _run(settings: BotSettings, data: DataDir) -> int:
     run_http = PoliteHttpClient(CurlHttpClient())
     # Autocomplete must answer within Discord's 3 seconds, so lookups never wait behind polite gaps.
     areas = AreaLookup(CurlHttpClient(timeout=2.5))
-    sources: dict[str, Source] = {"zillow": ZillowSource(run_http), "craigslist": CraigslistSource(run_http)}
+    # Placing an Area happens once per create or Area edit, outside Runs, so it skips the polite gaps.
+    place_http = CurlHttpClient()
+    sources: dict[str, Source] = {
+        "zillow": ZillowSource(run_http, lookup_http=place_http),
+        "craigslist": CraigslistSource(run_http),
+    }
 
     # The lambdas look `bridge` and `service` up when called, after all of them exist.
-    runner = SearchRunner(sources, store, lambda search: ChannelNotifier(bridge, search.channel_id))
+    runner = SearchRunner(sources, store, lambda search: ChannelNotifier(
+        bridge, search.channel_id, country(search.criteria.area.country).currency))
     scheduler = Scheduler(lambda search_id: service.run(search_id), settings.interval_minutes)
     service = SearchService(
-        store=store, runner=runner, scheduler=scheduler, areas=areas, source_keys=tuple(sources),
+        store=store, runner=runner, scheduler=scheduler, areas=areas, sources=sources,
         limits=Limits(per_server=settings.per_server, total=settings.total),
         interval_minutes=settings.interval_minutes,
         direct_message=lambda user_id, text: bridge.direct_message(user_id, text),

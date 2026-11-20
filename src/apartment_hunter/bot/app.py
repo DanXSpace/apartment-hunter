@@ -29,7 +29,14 @@ from apartment_hunter.bot.replies import (
 )
 from apartment_hunter.criteria import HomeType, Pets
 from apartment_hunter.models import Search
-from apartment_hunter.service import NewSearch, Pending, SearchChanges, SearchError, SearchService
+from apartment_hunter.service import (
+    EVERY_SOURCE,
+    NewSearch,
+    Pending,
+    SearchChanges,
+    SearchError,
+    SearchService,
+)
 from apartment_hunter.settings import BotSettings
 
 log = logging.getLogger(__name__)
@@ -53,7 +60,7 @@ PETS = [
     app_commands.Choice(name="Large dogs", value=Pets.LARGE_DOGS.value),
 ]
 SOURCES = [
-    app_commands.Choice(name="Zillow and Craigslist", value="both"),
+    app_commands.Choice(name="Zillow and Craigslist", value=EVERY_SOURCE),
     app_commands.Choice(name="Zillow only", value="zillow"),
     app_commands.Choice(name="Craigslist only", value="craigslist"),
 ]
@@ -216,7 +223,7 @@ def build_client(
             home_type=HomeType(home_type.value) if home_type else HomeType.ANY,
             pets=Pets(pets.value) if pets else Pets.NONE,
             name=name,
-            sources=(sources.value,) if sources and sources.value != "both" else None,
+            sources=(sources.value,) if sources else None,
         )
         await interaction.response.defer(thinking=True)
         try:
@@ -295,12 +302,8 @@ def build_client(
             min_baths=min_baths,
             home_type=HomeType(home_type.value) if home_type else None,
             pets=Pets(pets.value) if pets else None,
-            # None leaves the sites unchanged, so "both" has to name every site.
-            sources=(
-                None if sources is None
-                else service.source_keys if sources.value == "both"
-                else (sources.value,)
-            ),
+            # None leaves the sites unchanged; EVERY_SOURCE picks every site of the Area's country.
+            sources=(sources.value,) if sources else None,
             name=name,
         )
         await interaction.response.defer(ephemeral=True, thinking=True)

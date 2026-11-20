@@ -10,12 +10,15 @@ from urllib.parse import quote
 
 from scrapling.parser import Selector
 
-from apartment_hunter.criteria import Criteria, HomeType, Pets
+from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, SourceLocation
 from apartment_hunter.models import Listing
-from apartment_hunter.sources import BlockedError, ScrapeError, SourcePage
+from apartment_hunter.sources import ALL_FILTERS, BlockedError, CantPlace, ScrapeError, SourcePage
 from apartment_hunter.sources.http import HttpClient, raise_for_status
 
 SEARCH_URL = "https://www.zillow.com/homes/for_rent/"
+# Zillow's region types for the place kinds a Search accepts.
+ACCEPTED_KINDS = {"city": 6, "zipcode": 7, "neighborhood": 8}
+LOOKUP_DOWN = "Zillow's place lookup isn't answering right now. Try again in a few minutes."
 _SITE = "https://www.zillow.com"
 
 _BASE_FILTERS: dict[str, Any] = {
@@ -63,6 +66,78 @@ class ZillowCard:
     home_type: str
 
 
+@dataclass(frozen=True)
+class Place:
+    """A city, neighborhood or ZIP code from Zillow's place lookup."""
+
+    display: str
+    kind: str
+    region_id: int
+    lat: float
+    lon: float
+
+
+@dataclass(frozen=True)
+class Suggestions:
+    """What the place lookup offered. `top_is_place` is True when Zillow's first result, before any
+    filtering, is one of `places` (an Address or a state listed first makes it False)."""
+
+    places: list[Place]
+    top_is_place: bool
+
+
+def suggestions_url(text: str) -> str:
+    return "https://www.zillowstatic.com/autocomplete/v3/suggestions?q=" + quote(text, safe="")
+
+
+def _place(result: object) -> Place | None:
+    """The result as a Place when it is a city, neighborhood or ZIP code; otherwise None."""
+    if not isinstance(result, dict) or result.get("resultType") != "Region":
+        return None
+    meta: dict[str, Any] = result.get("metaData") or {}
+    kind = meta.get("regionType")
+    if kind not in ACCEPTED_KINDS:
+        return None
+    try:
+        return Place(
+            str(result["display"]), kind, int(meta["regionId"]), float(meta["lat"]), float(meta["lng"])
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def read_suggestions(body: str) -> Suggestions:
+    try:
+        results = json.loads(body).get("results", [])
+    except (ValueError, AttributeError):
+        return Suggestions([], top_is_place=False)
+    found = [_place(result) for result in results]
+    places = [place for place in found if place is not None]
+    return Suggestions(places, top_is_place=bool(found) and found[0] is not None)
+
+
+def parse_suggestions(body: str) -> list[Place]:
+    return read_suggestions(body).places
+
+
+def best_place(found: Suggestions, text: str) -> Place | None:
+    """The place called exactly `text` (any case), or else the top result when that is a place."""
+    exact = [p for p in found.places if p.display.casefold() == text.casefold()]
+    return exact[0] if exact else (found.places[0] if found.top_is_place else None)
+
+
+def look_up_places(http: HttpClient, text: str) -> Suggestions:
+    """One request to Zillow's place lookup; ScrapeError (or BlockedError) when it doesn't answer."""
+    try:
+        response = http.get(suggestions_url(text))
+    except ScrapeError:
+        raise
+    except Exception as error:
+        raise ScrapeError(LOOKUP_DOWN) from error
+    raise_for_status(response, blocked=LOOKUP_DOWN, failed=LOOKUP_DOWN)
+    return read_suggestions(response.text)
+
+
 def search_url(criteria: Criteria, page: int = 1) -> str:
     filters: dict[str, Any] = dict(_BASE_FILTERS)
     payment: dict[str, int] = {}
@@ -80,12 +155,13 @@ def search_url(criteria: Criteria, page: int = 1) -> str:
         filters[_PET_FILTERS[criteria.pets]] = {"value": True}
     for name in _EXCLUDED_HOME_TYPES.get(criteria.home_type, ()):
         filters[name] = {"value": False}
+    location = criteria.area.locations["zillow"]
     state = {
         "pagination": {"currentPage": page} if page > 1 else {},
         "isMapVisible": False,
         "isListVisible": True,
         "regionSelection": [
-            {"regionId": criteria.area.zillow_region_id, "regionType": criteria.area.zillow_region_type}
+            {"regionId": int(location["region_id"]), "regionType": int(location["region_type"])}
         ],
         "filterState": filters,
     }
@@ -158,11 +234,27 @@ def parse_search_page(html: str, scraped_at: datetime) -> tuple[list[ZillowCard]
 
 
 class ZillowSource:
-    key = "zillow"
+    """Reads Zillow. Places an Area on a Zillow region through Zillow's place lookup, using
+    `lookup_http` (default: the Runs' client) so placing needn't wait behind a Run's polite gaps."""
 
-    def __init__(self, http: HttpClient, now: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:
+    key = "zillow"
+    filters = ALL_FILTERS
+
+    def __init__(
+        self,
+        http: HttpClient,
+        now: Callable[[], datetime] = lambda: datetime.now(UTC),
+        lookup_http: HttpClient | None = None,
+    ) -> None:
         self._http = http
         self._now = now
+        self._lookup_http = lookup_http or http
+
+    def place(self, area: Area) -> SourceLocation:
+        found = best_place(look_up_places(self._lookup_http, area.display), area.display)
+        if found is None:
+            raise CantPlace(f"Zillow doesn't know {area.display}.")
+        return {"region_id": found.region_id, "region_type": ACCEPTED_KINDS[found.kind]}
 
     def results_url(self, criteria: Criteria) -> str:
         return search_url(criteria, 1)
