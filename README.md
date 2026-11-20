@@ -93,7 +93,7 @@ Logs also go to a rotating file in the data folder.
 
 The bot only makes outbound connections (Discord, Zillow, Craigslist), so it needs no open ports. Whether Zillow and Craigslist keep answering a given host is checked with `scripts/feasibility_check.py`; re-run it after any change of host.
 
-<!-- HOSTING: filled in after the home feasibility check -->
+Tested so far: a home internet connection (a Mac in the US) passed a 4-hour run on 2026-11-19, with every Zillow and Craigslist request answered (16 rounds, none failed). A spare computer or a Raspberry Pi at home is the recommended host. Cloud servers were not tested; data-centre addresses are more likely to be blocked, so run the check there before relying on one.
 
 ## Troubleshooting
 

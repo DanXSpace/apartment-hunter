@@ -14,11 +14,10 @@
 
 ## Progress
 
-Paused on 2026-11-17 after Task 3, at the owner's request. So far the build ran on the owner's computer, subagent-driven: a fresh implementer per task following the `tdd` skill, then a two-axis `code-review` (standards, spec) and fixes before the next task. Commits use the owner's GitHub no-reply address; in a fresh clone, set it first with `git config user.name DanXSpace` and `git config user.email 17147033+DanXSpace@users.noreply.github.com`.
+Built on 2026-11-19 on the owner's computer with the mattpocock-skills flow: spec issue #22, tickets #23–#32, one `tdd` implementer per ticket, a whole-branch two-axis `code-review` and one fix wave (`data/build/final-fixes.md`, local). Commits use the owner's GitHub no-reply address; in a fresh clone, set it first with `git config user.name DanXSpace` and `git config user.email 17147033+DanXSpace@users.noreply.github.com`.
 
-- **Task 1:** Steps 1–4 done. Step 5: cloud run not tested (the owner said no). Step 6: a home run started on 2026-11-17 on the owner's computer, writing `data/feasibility-home.log` there (local only); if that log is gone or incomplete, run it again. Step 7's gate is still open and comes before Task 6.
-- **Task 2:** done and reviewed (`079f181`).
-- **Task 3:** built (`ec1cdfc`); its review hasn't run yet. Resume with `code-review` at fixed point `079f181`, then Task 4.
+- **Task 1:** the home feasibility run passed on 2026-11-19 (16 rounds, Zillow and Craigslist both PASS); the cloud run was not tested (the owner said no). Step 7's gate is open.
+- **Tasks 2–15:** done and merged into `discord-bot`; the owner's manual check in a test server passed. 150 tests, ruff and mypy green.
 
 Decisions made along the way:
 - The re-lock in Task 2 moved `w3lib` to 2.6.0, which brings in `frostwork` 0.2.2 (Zyte's, from the Scrapy project); accepted rather than pinning `w3lib`.
