@@ -5,7 +5,12 @@ from typing import Protocol
 from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, SourceLocation
 from apartment_hunter.models import Listing
 
-SOURCE_NAMES = {"zillow": "Zillow", "craigslist": "Craigslist", "rightmove": "Rightmove"}
+SOURCE_NAMES = {
+    "zillow": "Zillow",
+    "craigslist": "Craigslist",
+    "rightmove": "Rightmove",
+    "pararius": "Pararius",
+}
 
 
 class ScrapeError(Exception):
