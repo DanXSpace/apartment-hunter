@@ -10,9 +10,8 @@ from apartment_hunter.service import NewSearch
 from apartment_hunter.sources import BlockedError, CantPlace, Filter, ScrapeError
 from apartment_hunter.sources.http import HttpResponse
 from apartment_hunter.sources.pararius import ParariusSource
-from conftest import AT
+from conftest import AT, add_source
 from fakes import FakeHttp
-from test_service import add_source, env  # noqa: F401  (env is a fixture)
 
 AMSTERDAM = Area("Amsterdam, North Holland, Netherlands", "city", "NL", 52.37, 4.90, locations={
     "pararius": {"city": "amsterdam"},
@@ -261,7 +260,7 @@ class DutchAreas:
         return replace(DE_PIJP, locations={})
 
 
-def test_a_dutch_search_reads_pararius_in_euros_and_notes_the_baths_it_cannot_filter(env):  # noqa: F811
+def test_a_dutch_search_reads_pararius_in_euros_and_notes_the_baths_it_cannot_filter(env):
     pararius = add_source(env, "pararius")
     pararius.filters = ParariusSource.filters
     env.service.areas = DutchAreas()

@@ -1,73 +1,17 @@
 import json
-from collections import defaultdict
-from dataclasses import replace
 from datetime import timedelta
-from itertools import count
-from types import SimpleNamespace
 
 import pytest
 
-from apartment_hunter.areas import AreaNotFound
 from apartment_hunter.countries import COUNTRIES, Country
 from apartment_hunter.criteria import Area, HomeType, Pets
 from apartment_hunter.runner import SearchRunner
-from apartment_hunter.scheduler import Scheduler
-from apartment_hunter.service import Limits, NewSearch, SearchChanges, SearchError, SearchService
+from apartment_hunter.service import Limits, NewSearch, SearchChanges, SearchError
 from apartment_hunter.sources import SOURCE_NAMES, Filter, ScrapeError, SourcePage
 from apartment_hunter.sources.bienici import BieniciSource
 from apartment_hunter.sources.kleinanzeigen import KleinanzeigenSource
-from apartment_hunter.storage import Store
-from conftest import AT, CHICAGO, make_listing, make_search
-from fakes import MINUTE, FakeClock, FakeHttp, FakeNotifier, FakeSource
-
-UNPLACED_CHICAGO = replace(CHICAGO, locations={})
-CAMDEN = Area("Camden, London, United Kingdom", "neighborhood", "GB", 51.539, -0.1426)
-
-
-class FakeAreas:
-    """Knows "Chicago, IL" and, for tests that add the UK, "Camden, London, United Kingdom" (neither
-    placed on any Source yet); anything else isn't a place. `down` makes every lookup fail. `cache` holds
-    what earlier suggestions found, by typed text."""
-
-    def __init__(self):
-        self.down: ScrapeError | None = None
-        self.cache: dict[str, Area] = {}
-
-    def suggest(self, text: str) -> list[str]:
-        return ["Chicago, IL"] if "chi" in text.casefold() else []
-
-    def cached(self, text: str) -> Area | None:
-        return self.cache.get(text)
-
-    def resolve(self, text: str) -> Area:
-        if self.down:
-            raise self.down
-        if text == "Chicago, IL":
-            return UNPLACED_CHICAGO
-        if text == CAMDEN.display:
-            return CAMDEN
-        raise AreaNotFound(f'I couldn\'t find a place called "{text}".')
-
-
-@pytest.fixture
-def env():
-    store = Store(":memory:")
-    zillow = FakeSource("zillow")
-    notifiers: defaultdict[int, FakeNotifier] = defaultdict(FakeNotifier)
-    runner = SearchRunner({"zillow": zillow}, store, lambda search: notifiers[search.channel_id])
-    clock = FakeClock()
-    scheduler = Scheduler(lambda sid: service.run(sid), clock=clock, next_delay=lambda m: m * 60)
-    scheduler.start()
-    ids = count(1)
-    areas = FakeAreas()
-    dms: list[tuple[int, str]] = []
-    service = SearchService(
-        store=store, runner=runner, scheduler=scheduler, areas=areas, sources={"zillow": zillow},
-        clock=lambda: AT + timedelta(seconds=clock()), new_id=lambda: f"s{next(ids)}",
-        direct_message=lambda user_id, text: dms.append((user_id, text)),
-    )
-    return SimpleNamespace(store=store, zillow=zillow, notifiers=notifiers, clock=clock,
-                           scheduler=scheduler, service=service, dms=dms, areas=areas)
+from conftest import AT, CAMDEN, CHICAGO, FakeAreas, add_source, make_listing, make_search
+from fakes import MINUTE, FakeHttp, FakeSource
 
 
 def test_create_seeds_right_away_and_reports_the_count(env):
@@ -508,15 +452,6 @@ def test_a_rename_during_a_run_lets_the_run_finish(env):
     env.scheduler.run_pending()
     assert pending.wait(0).alerts_sent == 1
     assert env.notifiers[10].listings == [("b", None)]
-
-
-def add_source(env, key: str) -> FakeSource:
-    """Give the bot another (fake) Source."""
-    source = FakeSource(key)
-    sources = {**env.service.sources, key: source}
-    env.service.sources = sources
-    env.service.runner = SearchRunner(sources, env.store, lambda search: env.notifiers[search.channel_id])
-    return source
 
 
 @pytest.fixture
