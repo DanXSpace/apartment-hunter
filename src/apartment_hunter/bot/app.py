@@ -29,7 +29,13 @@ from apartment_hunter.bot.replies import (
 )
 from apartment_hunter.criteria import HomeType, Pets
 from apartment_hunter.models import Search
-from apartment_hunter.service import NewSearch, Pending, SearchChanges, SearchError, SearchService
+from apartment_hunter.service import (
+    NewSearch,
+    Pending,
+    SearchChanges,
+    SearchError,
+    SearchService,
+)
 from apartment_hunter.settings import BotSettings
 
 log = logging.getLogger(__name__)
@@ -51,11 +57,6 @@ PETS = [
     app_commands.Choice(name="Cats", value=Pets.CATS.value),
     app_commands.Choice(name="Small dogs", value=Pets.SMALL_DOGS.value),
     app_commands.Choice(name="Large dogs", value=Pets.LARGE_DOGS.value),
-]
-SOURCES = [
-    app_commands.Choice(name="Zillow and Craigslist", value="both"),
-    app_commands.Choice(name="Zillow only", value="zillow"),
-    app_commands.Choice(name="Craigslist only", value="craigslist"),
 ]
 
 
@@ -182,17 +183,17 @@ def build_client(
 
     @search.command(name="new", description="Start watching an area for new rentals")
     @app_commands.describe(
-        area="A city, neighborhood or ZIP code",
-        max_price="Highest monthly rent in dollars",
-        min_price="Lowest monthly rent in dollars",
+        area="A city, neighborhood or postcode (pick a suggestion)",
+        max_price="Highest monthly rent, in the area's currency",
+        min_price="Lowest monthly rent, in the area's currency",
         min_beds="Fewest bedrooms (0 = studio)",
         min_baths="Fewest bathrooms",
         home_type="Kind of place",
         pets="Pets that must be allowed",
-        sources="Where to look (both if you leave it out)",
+        sources="Where to look (every site for the area's country if you leave it out)",
         name="A name for this search (made from the criteria if you leave it out)",
     )
-    @app_commands.choices(home_type=HOME_TYPES, pets=PETS, sources=SOURCES)
+    @app_commands.choices(home_type=HOME_TYPES, pets=PETS)
     async def new(
         interaction: discord.Interaction,
         area: str,
@@ -202,7 +203,7 @@ def build_client(
         min_baths: app_commands.Range[float, 0, 10] | None = None,
         home_type: app_commands.Choice[str] | None = None,
         pets: app_commands.Choice[str] | None = None,
-        sources: app_commands.Choice[str] | None = None,
+        sources: str | None = None,
         name: app_commands.Range[str, 1, 60] | None = None,
     ) -> None:
         assert interaction.guild is not None and interaction.channel is not None  # guild_only
@@ -216,7 +217,7 @@ def build_client(
             home_type=HomeType(home_type.value) if home_type else HomeType.ANY,
             pets=Pets(pets.value) if pets else Pets.NONE,
             name=name,
-            sources=(sources.value,) if sources and sources.value != "both" else None,
+            sources=(sources,) if sources else None,
         )
         await interaction.response.defer(thinking=True)
         try:
@@ -232,7 +233,7 @@ def build_client(
         outcome = await asyncio.to_thread(pending.wait, FIRST_OUTCOME_WAIT_SECONDS)
         await interaction.edit_original_response(
             content=first_check_cancelled_reply(created) if pending.cancelled
-            else created_reply(created, outcome, settings.interval_minutes)
+            else created_reply(created, outcome, settings.interval_minutes, pending.notes)
         )
         if not pending.done:
             task = asyncio.create_task(_post_when_done(bot, created, pending, settings.interval_minutes))
@@ -261,9 +262,9 @@ def build_client(
     @search.command(name="edit", description="Change a search (changing what it looks for starts it fresh)")
     @app_commands.describe(
         search="The search to change",
-        area="A city, neighborhood or ZIP code",
-        max_price="Highest monthly rent in dollars (0 = no maximum)",
-        min_price="Lowest monthly rent in dollars (0 = no minimum)",
+        area="A city, neighborhood or postcode (pick a suggestion)",
+        max_price="Highest monthly rent, in the area's currency (0 = no maximum)",
+        min_price="Lowest monthly rent, in the area's currency (0 = no minimum)",
         min_beds="Fewest bedrooms (0 = studio)",
         min_baths="Fewest bathrooms (0 = no minimum)",
         home_type="Kind of place",
@@ -271,7 +272,7 @@ def build_client(
         sources="Where to look",
         name="A new name for this search",
     )
-    @app_commands.choices(home_type=HOME_TYPES, pets=PETS, sources=SOURCES)
+    @app_commands.choices(home_type=HOME_TYPES, pets=PETS)
     async def edit(
         interaction: discord.Interaction,
         search: str,
@@ -282,7 +283,7 @@ def build_client(
         min_baths: app_commands.Range[float, 0, 10] | None = None,
         home_type: app_commands.Choice[str] | None = None,
         pets: app_commands.Choice[str] | None = None,
-        sources: app_commands.Choice[str] | None = None,
+        sources: str | None = None,
         name: app_commands.Range[str, 1, 60] | None = None,
     ) -> None:
         assert interaction.guild is not None  # guild_only
@@ -295,12 +296,9 @@ def build_client(
             min_baths=min_baths,
             home_type=HomeType(home_type.value) if home_type else None,
             pets=Pets(pets.value) if pets else None,
-            # None leaves the sites unchanged, so "both" has to name every site.
-            sources=(
-                None if sources is None
-                else service.source_keys if sources.value == "both"
-                else (sources.value,)
-            ),
+            # None leaves the Sources unchanged; EVERY_SOURCE ("All sites") picks every Source of the
+            # Area's country.
+            sources=(sources,) if sources else None,
             name=name,
         )
         await interaction.response.defer(ephemeral=True, thinking=True)
@@ -309,7 +307,8 @@ def build_client(
         except SearchError as error:
             await interaction.edit_original_response(content=refusal(error))
             return
-        await interaction.edit_original_response(content=edited_reply(edited, pending is not None))
+        await interaction.edit_original_response(
+            content=edited_reply(edited, pending is not None, pending.notes if pending else ()))
 
     @search.command(name="pause", description="Stop checking a search until you resume it")
     @app_commands.describe(search="The search to pause")
@@ -357,7 +356,8 @@ def build_client(
             await interaction.edit_original_response(content=refusal(error))
             return
         outcome = await asyncio.to_thread(pending.wait, FIRST_OUTCOME_WAIT_SECONDS)
-        content = deleted_reply(checked.name) if pending.cancelled else checked_reply(checked, outcome)
+        content = (deleted_reply(checked.name) if pending.cancelled
+                   else checked_reply(checked, outcome, pending.notes))
         await interaction.edit_original_response(content=content)
 
     async def search_names(
@@ -372,6 +372,22 @@ def build_client(
     for command in named:
         command.autocomplete("search")(search_names)
     edit.autocomplete("area")(area_suggestions)
+
+    async def source_choices(
+        interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        if interaction.guild is None:
+            return []
+        # The other options typed so far: the Area (a suggestion ends with its country) and, on edit,
+        # the Search whose Area counts when no new one is typed.
+        area = getattr(interaction.namespace, "area", None)
+        search_name = getattr(interaction.namespace, "search", None)
+        choices = await asyncio.to_thread(
+            service.source_choices, interaction.guild.id, area, search_name, current)
+        return [app_commands.Choice(name=label, value=value) for label, value in choices[:25]]
+
+    new.autocomplete("sources")(source_choices)
+    edit.autocomplete("sources")(source_choices)
 
     @bot.event
     async def on_guild_remove(guild: discord.Guild) -> None:
@@ -405,7 +421,7 @@ async def _post_when_done(bot: discord.Client, search: Search, pending: Pending,
     if pending.cancelled:
         text = first_check_cancelled_reply(search)
     elif outcome is not None:
-        text = created_reply(search, outcome, interval)
+        text = created_reply(search, outcome, interval, pending.notes)
     else:
         return
     channel = bot.get_channel(search.channel_id)

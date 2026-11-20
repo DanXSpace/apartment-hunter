@@ -1,6 +1,6 @@
 # Apartment Hunter
 
-A Discord bot that watches Zillow and Craigslist for rentals. Add it to your server, tell it what you're looking for with `/search`, and new listings and price drops are posted in your channel. No browser, nothing to install if you're just using it.
+A Discord bot that watches rental sites in the US, the UK, Germany, France, Spain, Italy, Portugal and the Netherlands. Add it to your server, tell it what you're looking for with `/search`, and new listings and price drops are posted in your channel. No browser, nothing to install if you're just using it.
 
 ```
 /search new  area: Chicago, IL   max_price: 2400   min_beds: 2   pets: Small dogs
@@ -21,13 +21,33 @@ A Discord bot that watches Zillow and Craigslist for rentals. Add it to your ser
 - **Doesn't lose alerts.** A listing only counts as seen once Discord accepts its alert, so a Discord outage just means the alert goes out on the next check.
 - **Polite by default.** One request at a time, a few seconds between requests to the same site, and each search is checked about every 15 minutes.
 
-> **Personal use only.** This bot reads Zillow and Craigslist search results automatically. Zillow's terms of use and Craigslist's terms of use forbid automated access. Check them before you run it, keep the polite defaults, and use it for your own apartment search and your friends'. Don't promote it publicly. You are responsible for how you use it.
+> **Personal use only.** This bot reads search results from Zillow, Craigslist, Rightmove, Zoopla, Kleinanzeigen, Bien'ici, Fotocasa, Idealista (idealista.it and idealista.pt) and Pararius automatically. The terms of use of these sites generally forbid automated access. Check them before you run it, keep the polite defaults, and use it for your own apartment search and your friends'. Don't promote it publicly. You are responsible for how you use it.
 
 ## For people using it
 
 1. Get the invite link from whoever runs the bot, and add the bot to your Discord server.
-2. In the channel where you want alerts, type `/search new` and give it an area (a city, neighborhood or ZIP code). Everything else is optional: price range, bedrooms, bathrooms, home type, pets, which sites to check, and a name.
+2. In the channel where you want alerts, type `/search new` and give it an area (a city, neighborhood or postcode, like "Camden, London", "Kreuzberg, Berlin" or "60614"). Suggestions show the country, so you can tell Paris, France from Paris, TX. Everything else is optional: price range, bedrooms, bathrooms, home type, pets, which sites to check, and a name.
 3. Wait for the "Watching" message, then new listings show up in that channel.
+
+### Countries and sites
+
+A search uses the sites of its area's country:
+
+| Country | Sites (`sources`) | Prices in | Postcodes | Can't filter by |
+|---|---|---|---|---|
+| United States | Zillow, Craigslist | $ | yes | |
+| United Kingdom | Rightmove, Zoopla | £ | yes | pets (Rightmove) |
+| Germany | Kleinanzeigen | € | yes | bathrooms |
+| France | Bien'ici | € | yes | bathrooms, pets |
+| Spain | Fotocasa | € | no | |
+| Italy | Idealista (idealista.it) | € | yes | |
+| Portugal | Idealista (idealista.pt) | € | yes | pets |
+| Netherlands | Pararius | € | no | bathrooms |
+
+- **Sites.** Leave `sources` out and the search checks every site for its country. The option suggests "All sites" plus the sites of the area you typed; a site from another country is refused with the list of ones you can pick. If a site can't search your area, the search is created with the others and the reply says which site was left out and why; if none can, nothing is saved. Fotocasa and Pararius can't search by postcode, and they're the only sites for Spain and the Netherlands, so use a district, neighbourhood or city there. Changing a search's area to another country switches it to that country's sites, unless you name them.
+- **Prices** are whole monthly amounts in the country's currency, with no conversion: `max_price: 2000` in London means £2,000 a month. UK rents shown per week are turned into monthly rents (×52/12) so they compare.
+- **Bedrooms mean bedrooms everywhere.** Many European sites count rooms, the living room included. There, `min_beds: 2` asks for at least 3 rooms, and a listing's beds are shown as its rooms minus one (a studio is 0).
+- **Filters a site can't apply** are passed over, not faked: the "Watching" reply and `/search check` say so ("Pararius can't filter by baths, so you'll see all of its matches.").
 
 | Command | What it does |
 |---|---|
@@ -91,9 +111,28 @@ Logs also go to a rotating file in the data folder.
 
 ### Hosting
 
-The bot only makes outbound connections (Discord, Zillow, Craigslist), so it needs no open ports. Whether Zillow and Craigslist keep answering a given host is checked with `scripts/feasibility_check.py`; re-run it after any change of host.
+The bot only makes outbound connections (Discord, the listing sites and the place lookup), so it needs no open ports. Whether Zillow and Craigslist keep answering a given host is checked with `scripts/feasibility_check.py`; re-run it after any change of host.
 
-Tested so far: a home internet connection (a Mac in the US) passed a 4-hour run on 2026-11-19, with every Zillow and Craigslist request answered (16 rounds, none failed). A spare computer or a Raspberry Pi at home is the recommended host. Cloud servers were not tested; data-centre addresses are more likely to be blocked, so run the check there before relying on one.
+Every site was chosen by a feasibility run from the owner's home internet connection: plain requests, no browser, 16 rounds over about 4 hours.
+
+| Site | Result |
+|---|---|
+| Zillow, Craigslist | Passed (2026-11-19), every request answered |
+| Rightmove | Passed (2026-11-19) |
+| Zoopla | Passed (2026-11-19), one blocked request that cleared on the next try |
+| Pararius | Passed (2026-11-19) |
+| Fotocasa | Passed (2026-11-19) |
+| Idealista (idealista.it, idealista.pt) | Passed (2026-11-19) |
+| Bien'ici | Passed (2026-11-20) |
+| Kleinanzeigen | Passed (2026-11-20), all 16 rounds answered |
+
+Not used, because they blocked plain requests in the probes or the 4-hour run: Leboncoin, SeLoger, ImmoScout24, Funda, Idealista Spain and Immowelt (its newest-first filtered search sits behind bot protection, so Germany uses Kleinanzeigen).
+
+A spare computer or a Raspberry Pi at home is the recommended host. Cloud servers were not tested; data-centre addresses are more likely to be blocked, so run the check there before relying on one.
+
+### Place lookup
+
+Areas are looked up with [Photon](https://photon.komoot.io), the OpenStreetMap search service run by komoot. It needs no key, but it's a free service with a fair-use policy, so the bot keeps its use small: suggestions start at 3 characters, answers are cached, and lookups are limited to one every 2 seconds across the whole bot, with a User-Agent naming the app. Only cities, neighborhoods and postcodes in the supported countries are offered. If Photon doesn't answer, new searches and area changes fail with "The place lookup isn't answering right now" while existing searches keep running, since each site's location for an area is worked out once and saved with the search.
 
 ## Troubleshooting
 
@@ -109,19 +148,25 @@ Another copy is using the same data folder. Stop it first, or point `DATA_DIR` s
 **"I can't post in this channel. Give me the View Channel, Send Messages and Embed Links permissions here…"**
 Give the bot those three permissions in the channel, or run the command in another channel. If a search's channel is deleted or the bot loses access later, the search is paused and shows "Needs attention"; fix the permission (or recreate the search in another channel) and use `/search resume`.
 
-**"I couldn't find a place called …"**
-Use a city, neighborhood or ZIP code, like "Chicago, IL" or "60614". Street addresses and whole states aren't areas.
+**"I couldn't find a place called … in the countries I cover"**
+Use a city, neighborhood or postcode in one of the supported countries, like "Chicago, IL", "Camden, London" or "60614". Street addresses and whole states or regions aren't areas.
 
-**"Zillow's place lookup isn't answering right now" or "I couldn't look up places right now"**
-Zillow's place lookup failed. Nothing was saved; try again in a minute.
+**"The place lookup isn't answering right now" or "I couldn't look up places right now"**
+Photon, or a site's own place lookup, didn't answer. Nothing was saved; try again in a minute.
+
+**"… was left out: …" or "I can't search … on any site"**
+A site can't search the area you picked (it doesn't know the place, or it can't search by postcode, like Fotocasa and Pararius). The search uses the country's other sites; when there are none, nothing is saved. Try the neighbourhood, district or city instead.
+
+**"… can't search …. Pick from: …"**
+You picked a site from another country. Pick one of the sites listed, or leave `sources` out to use them all.
 
 **"The bot is watching as many searches as it can right now"**
 The bot's total limit is reached. Delete a search you don't need, or ask the owner to raise `MAX_SEARCHES_TOTAL`.
 
-**"Zillow is blocking requests from this computer right now" (or Craigslist)**
-The site's bot protection turned the host away. This usually clears on its own, and the bot keeps trying. If it lasts for days, run `scripts/feasibility_check.py` on the host; a host that stays blocked may need to move (see Hosting).
+**"Zillow is blocking requests from this computer right now" (or another site)**
+The site's bot protection turned the host away. This usually clears on its own, and the bot keeps trying. If it lasts for days, run `scripts/feasibility_check.py` on the host (for Zillow and Craigslist); a host that stays blocked may need to move (see Hosting).
 
-**"Zillow's page layout changed, so listings couldn't be read. The bot needs an update." (or Craigslist)**
+**"Zillow's page layout changed, so listings couldn't be read. The bot needs an update." (or another site)**
 The site changed its pages and the parser needs updating. Please [open an issue](https://github.com/DanXSpace/apartment-hunter/issues).
 
 **"You can check … again in N minutes"**
@@ -137,10 +182,10 @@ Discord ⇄ Bot (slash commands, posting) ⇄ Search service ⇄ Store (SQLite)
                                                │
                               Scheduler (one Run at a time, jittered)
                                                │
-                     SearchRunner → Sources (Zillow, Craigslist) → plain HTTP
+                     SearchRunner → Sources (one per site) → plain HTTP
 ```
 
-The bot is thin: it turns commands into calls on the search service and results into replies. The service owns the rules (limits, server isolation, seeding). Sources turn a search's criteria into plain HTTP requests (with Chrome's TLS fingerprint, through curl_cffi) and parse the pages into listings. There is no browser anywhere.
+The bot is thin: it turns commands into calls on the search service and results into replies. The service owns the rules (limits, server isolation, seeding, which sites a country uses). An area is resolved once through Photon to a country, then each of that country's Sources works out what it needs to search there (its source location), which is saved with the search, so Runs make no extra lookups. Sources turn a search's criteria into plain HTTP requests (with Chrome's TLS fingerprint, through curl_cffi) and parse the pages into listings. The countries, their currencies and their sites live in one table (`src/apartment_hunter/countries.py`). There is no browser anywhere.
 
 v0.2, the browser-based apartments.com watcher with `config.toml`, lives at the [`v0.2-apartments-com`](https://github.com/DanXSpace/apartment-hunter/tree/v0.2-apartments-com) tag, and the Kafka-based v0.1 at [`v0.1-kafka`](https://github.com/DanXSpace/apartment-hunter/tree/v0.1-kafka).
 
@@ -153,7 +198,7 @@ uv run mypy
 uv run pytest
 ```
 
-Tests never touch Zillow, Craigslist or Discord. The Sources are tested against saved pages in `tests/fixtures/`; if a site changes its layout, save a fresh results page there and update the tests. To check whether a host can reach both sites, run `uv run python scripts/feasibility_check.py`.
+Tests never touch a listing site, Photon or Discord. The Sources are tested against saved pages in `tests/fixtures/`; if a site changes its layout, save a fresh results page there and update the tests. To check whether a host can reach Zillow and Craigslist, run `uv run python scripts/feasibility_check.py`.
 
 ## License
 

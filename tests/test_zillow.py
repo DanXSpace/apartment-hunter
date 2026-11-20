@@ -1,13 +1,20 @@
 import json
+from dataclasses import replace
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-from apartment_hunter.criteria import Criteria, HomeType, Pets
+from apartment_hunter.criteria import Area, Criteria, HomeType, Pets
 from apartment_hunter.models import Listing
-from apartment_hunter.sources import BlockedError, ScrapeError
+from apartment_hunter.sources import BlockedError, CantPlace, ScrapeError
 from apartment_hunter.sources.http import HttpResponse
-from apartment_hunter.sources.zillow import ZillowSource, parse_search_page, search_url
+from apartment_hunter.sources.zillow import (
+    ZillowSource,
+    parse_search_page,
+    parse_suggestions,
+    search_url,
+    suggestions_url,
+)
 from conftest import AT, CHICAGO, LINCOLN_PARK
 from fakes import FakeHttp
 
@@ -160,3 +167,93 @@ def test_parses_a_saved_real_page(fixture_html):
     assert all(
         c.listing.listing_id and c.listing.url.startswith("https://www.zillow.com/") and c.listing.address
         for c in cards)
+
+
+PLACES_BODY = json.dumps({"results": [
+    {"display": "Lincoln Park, Chicago, IL", "resultType": "Region",
+     "metaData": {"regionId": 269590, "regionType": "neighborhood", "lat": 41.9237, "lng": -87.6505}},
+    {"display": "Chicago, IL", "resultType": "Region",
+     "metaData": {"regionId": 17426, "regionType": "city", "lat": 41.8781, "lng": -87.6298}},
+]})
+
+
+def test_place_finds_the_zillow_region_through_its_place_lookup():
+    runs, lookups = FakeHttp(), FakeHttp(PLACES_BODY)
+    source = ZillowSource(runs, now=lambda: AT, lookup_http=lookups)
+    assert source.place(replace(CHICAGO, locations={})) == {"region_id": 17426, "region_type": 6}
+    assert source.place(replace(LINCOLN_PARK, locations={})) == {"region_id": 269590, "region_type": 8}
+    assert runs.requested == []
+    assert lookups.requested[0].endswith("?q=Chicago%2C%20IL")
+
+
+def test_place_refuses_an_area_zillow_does_not_know():
+    source = ZillowSource(FakeHttp(json.dumps({"results": []})), now=lambda: AT)
+    with pytest.raises(CantPlace, match="Zillow doesn't know Chicago, IL"):
+        source.place(replace(CHICAGO, locations={}))
+
+
+def test_place_raises_a_scrape_error_when_the_lookup_is_down():
+    source = ZillowSource(FakeHttp(HttpResponse(500, "")), now=lambda: AT)
+    with pytest.raises(ScrapeError, match="place lookup isn't answering"):
+        source.place(replace(CHICAGO, locations={}))
+
+
+def region(display: str, kind: str, region_id: int, lat: float, lng: float) -> dict:
+    return {"display": display, "resultType": "Region",
+            "metaData": {"regionId": region_id, "regionType": kind, "lat": lat, "lng": lng}}
+
+
+LINCOLN_PARKS = json.dumps({"results": [
+    region("Lincoln Park, MI", "city", 26148, 42.2506, -83.1785),
+    region("Lincoln Park, NJ", "city", 25390, 40.9242, -74.3021),
+    region("Lincoln Park, Chicago, IL", "neighborhood", 269590, 41.9237, -87.6505),
+]})
+
+
+def test_place_finds_a_photon_area_on_the_nearby_zillow_region_of_its_kind():
+    lookups = FakeHttp(LINCOLN_PARKS)
+    source = ZillowSource(FakeHttp(), now=lambda: AT, lookup_http=lookups)
+    area = Area("Lincoln Park, IL, United States", "neighborhood", "US", 41.9214, -87.6475)
+    assert source.place(area) == {"region_id": 269590, "region_type": 8}
+    assert lookups.requested[0].endswith("?q=Lincoln%20Park%2C%20IL")
+
+
+def test_place_looks_up_a_zip_code_by_itself():
+    lookups = FakeHttp(json.dumps({"results": [region("60614", "zipcode", 84617, 41.9227, -87.6533)]}))
+    source = ZillowSource(FakeHttp(), now=lambda: AT, lookup_http=lookups)
+    area = Area("60614, IL, United States", "zipcode", "US", 41.92, -87.65)
+    assert source.place(area) == {"region_id": 84617, "region_type": 7}
+    assert lookups.requested[0].endswith("?q=60614")
+
+
+def test_place_never_widens_an_area_to_a_nearby_region_of_another_kind():
+    # Zillow has no region for this neighbourhood, only the city around it: searching all of Chicago
+    # would be a silent widening, so Zillow is left out instead.
+    body = json.dumps({"results": [region("Chicago, IL", "city", 17426, 41.8781, -87.6298)]})
+    source = ZillowSource(FakeHttp(body), now=lambda: AT)
+    area = Area("Old Town, Chicago, IL, United States", "neighborhood", "US", 41.9112, -87.6378)
+    with pytest.raises(CantPlace) as refused:
+        source.place(area)
+    assert str(refused.value) == "Zillow doesn't know Old Town, Chicago, IL, United States."
+
+
+def test_place_refuses_a_zillow_region_far_from_the_area():
+    source = ZillowSource(FakeHttp(LINCOLN_PARKS), now=lambda: AT)
+    area = Area("Lincoln Park, NY, United States", "city", "US", 41.95, -74.0)
+    with pytest.raises(CantPlace, match="Zillow doesn't know Lincoln Park, NY, United States"):
+        source.place(area)
+
+
+def test_only_cities_neighborhoods_and_zip_codes_are_offered():
+    body = json.dumps({"results": [
+        region("Lincoln Park, Chicago, IL", "neighborhood", 269590, 41.9237, -87.6505),
+        {"display": "1906 N Lincoln Park W Chicago, IL 60614", "resultType": "Address", "metaData": {}},
+        region("Illinois", "state", 21, 40.0, -89.0),
+        region("Chicago, IL", "city", 17426, 41.8781, -87.6298),
+    ]})
+    assert [p.display for p in parse_suggestions(body)] == ["Lincoln Park, Chicago, IL", "Chicago, IL"]
+
+
+def test_suggestions_url_encodes_the_text():
+    assert (suggestions_url("Coeur d'Alene, ID")
+            == "https://www.zillowstatic.com/autocomplete/v3/suggestions?q=Coeur%20d%27Alene%2C%20ID")

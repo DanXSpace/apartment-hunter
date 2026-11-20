@@ -64,6 +64,28 @@ def test_created_reply_suggests_narrowing_even_when_the_other_source_failed():
         "are only caught among the newest ones. Narrow it with /search edit to catch them all.")
 
 
+NOTES = ("Craigslist was left out: Craigslist has no site near Chicago, IL.",
+         "Zillow can't filter by pets, so you'll see all of its matches.")
+
+
+def test_created_reply_ends_with_the_notes_about_left_out_sources_and_filters():
+    outcome = RunOutcome("s1", (ok("zillow", 3),), 0)
+    assert created_reply(SEARCH, outcome, 15, NOTES) == (
+        '✅ Watching "Chicago 2BR". 3 places match right now. '
+        "I'll post new ones and price drops in this channel. "
+        "Craigslist was left out: Craigslist has no site near Chicago, IL. "
+        "Zillow can't filter by pets, so you'll see all of its matches.")
+    assert created_reply(SEARCH, None, 15, NOTES).endswith(
+        "I'll post here once it's done. Craigslist was left out: Craigslist has no site near Chicago, IL. "
+        "Zillow can't filter by pets, so you'll see all of its matches.")
+
+
+def test_edited_reply_ends_with_the_notes():
+    assert edited_reply(SEARCH, True, NOTES[1:]) == (
+        'Updated "Chicago 2BR". Its criteria changed, so it\'s taking a fresh look; '
+        "no alerts for what's already listed. Zillow can't filter by pets, so you'll see all of its matches.")
+
+
 def test_created_reply_when_everything_failed():
     outcome = RunOutcome("s1", (failed("zillow", "Zillow is blocking requests."),), 0)
     assert created_reply(SEARCH, outcome, 15) == (
@@ -103,10 +125,30 @@ def test_help_reply_states_the_owner_s_limits():
     assert "about every 20 minutes" in text
 
 
-def test_help_reply_names_both_sources_and_the_sources_option():
+def test_help_reply_names_every_country_with_its_sources_and_currency():
     text = help_reply(Limits(), 15)
-    assert "watches Zillow and Craigslist for rentals" in text
-    assert "`sources`" in text
+    for line in [
+        "• United States: Zillow and Craigslist, prices in $",
+        "• United Kingdom: Rightmove and Zoopla, prices in £",
+        "• Germany: Kleinanzeigen, prices in €",
+        "• France: Bien'ici, prices in €",
+        "• Spain: Fotocasa, prices in €",
+        "• Italy: Idealista Italy, prices in €",
+        "• Portugal: Idealista Portugal, prices in €",
+        "• Netherlands: Pararius, prices in €",
+    ]:
+        assert line in text.splitlines()
+
+
+def test_help_reply_fits_in_one_discord_message():
+    assert len(help_reply(Limits(per_server=100, total=1000), 120)) <= 2000
+
+
+def test_help_reply_explains_the_sources_option_bedrooms_and_postcodes():
+    text = help_reply(Limits(), 15)
+    assert "every site for its country unless you pick one with `sources`" in text
+    assert "a city, neighborhood or postcode" in text
+    assert "bedrooms, not rooms" in text
 
 
 def test_edited_reply_says_when_it_takes_a_fresh_look():
@@ -140,6 +182,14 @@ def test_checked_reply_counts_alerts_and_names_failed_sources():
         'Checked "Chicago 2BR": 2 new alerts posted. Craigslist didn\'t work (Craigslist is down.)')
     assert checked_reply(SEARCH, None) == (
         'Still checking "Chicago 2BR"; any alerts will show up in the channel.')
+
+
+def test_checked_reply_ends_with_the_filters_a_source_cannot_apply():
+    note = "Rightmove can't filter by pets, so you'll see all of its matches."
+    assert checked_reply(SEARCH, RunOutcome("s1", (ok("zillow", 3),), 0), (note,)) == (
+        f'Checked "Chicago 2BR": 0 new alerts posted. {note}')
+    assert checked_reply(SEARCH, None, (note,)) == (
+        f'Still checking "Chicago 2BR"; any alerts will show up in the channel. {note}')
 
 
 def test_not_in_test_server_reply_gives_the_invite_link():

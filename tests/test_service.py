@@ -1,57 +1,17 @@
-from collections import defaultdict
+import json
 from datetime import timedelta
-from itertools import count
-from types import SimpleNamespace
 
 import pytest
 
-from apartment_hunter.areas import AreaNotFound
-from apartment_hunter.criteria import Area, Pets
+from apartment_hunter.countries import COUNTRIES, Country
+from apartment_hunter.criteria import Area, HomeType, Pets
 from apartment_hunter.runner import SearchRunner
-from apartment_hunter.scheduler import Scheduler
-from apartment_hunter.service import Limits, NewSearch, SearchChanges, SearchError, SearchService
-from apartment_hunter.sources import ScrapeError, SourcePage
-from apartment_hunter.storage import Store
-from conftest import AT, CHICAGO, make_listing, make_search
-from fakes import MINUTE, FakeClock, FakeNotifier, FakeSource
-
-
-class FakeAreas:
-    """Knows only "Chicago, IL"; anything else isn't a place. `down` makes every lookup fail."""
-
-    def __init__(self):
-        self.down: ScrapeError | None = None
-
-    def suggest(self, text: str) -> list[str]:
-        return ["Chicago, IL"] if "chi" in text.casefold() else []
-
-    def resolve(self, text: str) -> Area:
-        if self.down:
-            raise self.down
-        if text == "Chicago, IL":
-            return CHICAGO
-        raise AreaNotFound(f'I couldn\'t find a place called "{text}".')
-
-
-@pytest.fixture
-def env():
-    store = Store(":memory:")
-    zillow = FakeSource("zillow")
-    notifiers: defaultdict[int, FakeNotifier] = defaultdict(FakeNotifier)
-    runner = SearchRunner({"zillow": zillow}, store, lambda search: notifiers[search.channel_id])
-    clock = FakeClock()
-    scheduler = Scheduler(lambda sid: service.run(sid), clock=clock, next_delay=lambda m: m * 60)
-    scheduler.start()
-    ids = count(1)
-    areas = FakeAreas()
-    dms: list[tuple[int, str]] = []
-    service = SearchService(
-        store=store, runner=runner, scheduler=scheduler, areas=areas, source_keys=("zillow",),
-        clock=lambda: AT + timedelta(seconds=clock()), new_id=lambda: f"s{next(ids)}",
-        direct_message=lambda user_id, text: dms.append((user_id, text)),
-    )
-    return SimpleNamespace(store=store, zillow=zillow, notifiers=notifiers, clock=clock,
-                           scheduler=scheduler, service=service, dms=dms, areas=areas)
+from apartment_hunter.service import Limits, NewSearch, SearchChanges, SearchError
+from apartment_hunter.sources import SOURCE_NAMES, Filter, ScrapeError, SourcePage
+from apartment_hunter.sources.bienici import BieniciSource
+from apartment_hunter.sources.kleinanzeigen import KleinanzeigenSource
+from conftest import AT, CAMDEN, CHICAGO, FakeAreas, add_source, make_listing, make_search
+from fakes import MINUTE, FakeHttp, FakeSource
 
 
 def test_create_seeds_right_away_and_reports_the_count(env):
@@ -63,6 +23,18 @@ def test_create_seeds_right_away_and_reports_the_count(env):
     assert search.name == "Chicago, IL · 2+ bd · up to $2,400 · small dogs"
     assert outcome.results[0].total == 214 and outcome.results[0].seeded
     assert env.notifiers[10].texts == [] and env.notifiers[10].listings == []
+
+
+def test_create_places_the_area_once_and_runs_search_by_the_saved_location(env):
+    env.zillow.pages = [[make_listing("a")], [make_listing("a")]]
+    search, _ = env.service.create(1, 10, 99, NewSearch("Chicago, IL"), can_post=True)
+    env.scheduler.run_pending()
+    env.clock.advance(15 * MINUTE)
+    env.scheduler.run_pending()
+    assert search.criteria.area.locations == {"zillow": {"at": "Chicago, IL"}}
+    assert env.zillow.placed == ["Chicago, IL"]
+    assert env.zillow.locations == [{"at": "Chicago, IL"}, {"at": "Chicago, IL"}]
+    assert env.store.get_search(search.id) == search
 
 
 def test_create_refuses_without_permission_and_saves_nothing(env):
@@ -480,3 +452,239 @@ def test_a_rename_during_a_run_lets_the_run_finish(env):
     env.scheduler.run_pending()
     assert pending.wait(0).alerts_sent == 1
     assert env.notifiers[10].listings == [("b", None)]
+
+
+@pytest.fixture
+def uk(env, monkeypatch) -> FakeSource:
+    """Adds the UK to the countries table with one (fake) Source, Rightmove, and returns it."""
+    monkeypatch.setitem(COUNTRIES, "GB", Country("GB", "United Kingdom", "£", ("rightmove",)))
+    monkeypatch.setitem(SOURCE_NAMES, "rightmove", "Rightmove")
+    return add_source(env, "rightmove")
+
+
+def test_a_source_that_cannot_place_the_area_is_left_out_with_its_reason(env, monkeypatch):
+    monkeypatch.setitem(COUNTRIES, "US", Country("US", "United States", "$", ("zillow", "craigslist")))
+    craigslist = add_source(env, "craigslist")
+    craigslist.cant_place = "Craigslist has no site near Chicago, IL."
+    search, pending = env.service.create(1, 10, 99, NewSearch("Chicago, IL"), can_post=True)
+    assert search.sources == ("zillow",)
+    assert pending.notes == ("Craigslist was left out: Craigslist has no site near Chicago, IL.",)
+
+
+def test_create_is_refused_when_no_source_can_place_the_area(env):
+    env.zillow.cant_place = "Zillow doesn't know Chicago, IL."
+    with pytest.raises(SearchError) as refused:
+        env.service.create(1, 10, 99, NewSearch("Chicago, IL"), can_post=True)
+    assert str(refused.value) == "I can't search Chicago, IL on any site: Zillow was left out: " \
+                                 "Zillow doesn't know Chicago, IL."
+    assert env.service.statuses(1) == []
+
+
+def test_create_in_another_country_uses_its_sources_and_currency(env, uk):
+    uk.pages = [[make_listing("a", source="rightmove")]]
+    search, _ = env.service.create(1, 10, 99, NewSearch(CAMDEN.display, max_price=2000), can_post=True)
+    env.scheduler.run_pending()
+    assert search.sources == ("rightmove",)
+    assert search.name == "Camden, London, United Kingdom · up to £2,000"
+    assert uk.locations == [{"at": CAMDEN.display}] and env.zillow.placed == []
+
+
+def test_a_uk_search_reads_rightmove_and_zoopla_by_default(env):
+    add_source(env, "rightmove")
+    add_source(env, "zoopla")
+    search, _ = env.service.create(1, 10, 99, NewSearch(CAMDEN.display), can_post=True)
+    assert search.sources == ("rightmove", "zoopla")
+    with pytest.raises(SearchError) as refused:
+        env.service.create(1, 10, 99, NewSearch(CAMDEN.display, sources=("zillow",)), can_post=True)
+    assert str(refused.value) == ("Zillow can't search Camden, London, United Kingdom. "
+                                  "Pick from: Rightmove, Zoopla.")
+
+
+def test_a_source_from_another_country_is_refused_with_the_valid_ones(env, uk):
+    with pytest.raises(SearchError) as refused:
+        env.service.create(1, 10, 99, NewSearch(CAMDEN.display, sources=("zillow",)), can_post=True)
+    assert str(refused.value) == "Zillow can't search Camden, London, United Kingdom. Pick from: Rightmove."
+    assert env.service.statuses(1) == []
+
+
+def test_an_area_edit_to_another_country_switches_sources_and_reseeds_quietly(env, uk):
+    env.zillow.pages = [[make_listing("a")]]
+    uk.pages = [[make_listing("b", source="rightmove")]]
+    env.service.create(1, 10, 99, NewSearch("Chicago, IL", name="Home"), can_post=True)
+    env.scheduler.run_pending()
+    edited, pending = env.service.edit(1, "Home", SearchChanges(area=CAMDEN.display))
+    env.scheduler.run_pending()
+    assert edited.sources == ("rightmove",)
+    assert [(r.source, r.seeded) for r in pending.wait(0).results] == [("rightmove", True)]
+    assert env.notifiers[10].listings == []
+
+
+def test_the_reply_notes_filters_a_source_cannot_apply(env, uk):
+    uk.filters = frozenset({Filter.PRICE, Filter.BEDS})
+    _, pending = env.service.create(1, 10, 99, NewSearch(CAMDEN.display, max_price=2000, min_beds=2,
+                                                         home_type=HomeType.HOUSE, pets=Pets.CATS),
+                                    can_post=True)
+    assert pending.notes == (
+        "Rightmove can't filter by home type or pets, so you'll see all of its matches.",)
+    _, pending = env.service.create(1, 10, 99, NewSearch("Chicago, IL", pets=Pets.CATS), can_post=True)
+    assert pending.notes == ()
+
+
+OLD_CRITERIA = json.dumps({
+    "area": {"display": "Chicago, IL", "kind": "city", "zillow_region_id": 17426, "zillow_region_type": 6,
+             "lat": 41.8781, "lon": -87.6298, "craigslist_site": "chicago", "craigslist_radius_miles": 10},
+    "min_price": None, "max_price": 2400, "min_beds": None, "min_baths": None,
+    "home_type": "any", "pets": "none",
+})
+
+
+def test_a_search_saved_before_countries_loads_as_us_and_does_not_reseed(env):
+    env.store.add_search(make_search("old", name="Old"))
+    env.store.save_listing("old", make_listing("a"))
+    env.store.mark_seeded("old", "zillow")
+    with env.store.db:  # as the previous release saved it
+        env.store.db.execute("UPDATE searches SET criteria = ?", (OLD_CRITERIA,))
+    env.zillow.pages = [[make_listing("a"), make_listing("b")]]
+    env.service.rand = lambda lo, hi: 0
+    env.service.load()
+    env.scheduler.run_pending()
+    old = env.service.find(1, "Old")
+    assert old.criteria.area == CHICAGO and old.criteria.max_price == 2400
+    assert env.zillow.locations == [{"region_id": 17426, "region_type": 6}]
+    assert env.notifiers[10].listings == [("b", None)]
+    assert env.service.statuses(1)[0].listings == 2
+
+
+def test_the_sources_choices_follow_the_country_of_the_area_being_typed(env, uk):
+    add_source(env, "craigslist")
+    assert env.service.source_choices(1, area=CAMDEN.display) == [
+        ("All sites", "all"), ("Rightmove", "rightmove")]
+    assert env.service.source_choices(1, area="Lincoln Park, IL, United States") == [
+        ("All sites", "all"), ("Zillow", "zillow"), ("Craigslist", "craigslist")]
+
+
+def test_with_no_area_typed_yet_the_sources_choices_offer_every_site(env, uk):
+    add_source(env, "craigslist")
+    assert env.service.source_choices(1, area=None) == [
+        ("All sites", "all"), ("Zillow", "zillow"), ("Craigslist", "craigslist"), ("Rightmove", "rightmove")]
+    assert env.service.source_choices(1, area="Lon") == env.service.source_choices(1, area=None)
+
+
+def test_an_area_typed_without_its_country_finds_it_from_earlier_suggestions(env, uk):
+    add_source(env, "craigslist")
+    env.areas.cache["Camden"] = CAMDEN  # the area autocomplete already looked "Camden" up
+    assert env.service.source_choices(1, area="Camden") == [("All sites", "all"), ("Rightmove", "rightmove")]
+    assert env.service.source_choices(1, area="Camde") == [
+        ("All sites", "all"), ("Zillow", "zillow"), ("Craigslist", "craigslist"), ("Rightmove", "rightmove")]
+
+
+def test_editing_without_a_new_area_offers_the_sources_of_the_searchs_area(env, uk):
+    env.service.create(1, 10, 99, NewSearch(CAMDEN.display, name="Flat"), can_post=True)
+    assert env.service.source_choices(1, area=None, search="flat") == [
+        ("All sites", "all"), ("Rightmove", "rightmove")]
+    assert env.service.source_choices(1, area="Chicago, IL, United States", search="Flat") == [
+        ("All sites", "all"), ("Zillow", "zillow")]
+    assert env.service.source_choices(1, area=None, search="nope") == [
+        ("All sites", "all"), ("Zillow", "zillow"), ("Rightmove", "rightmove")]
+
+
+def test_the_sources_choices_narrow_to_what_is_typed_in_the_option(env, uk):
+    assert env.service.source_choices(1, area=None, current="RIGHT") == [("Rightmove", "rightmove")]
+
+
+def test_a_site_typed_by_name_instead_of_picked_works(env, uk):
+    search, _ = env.service.create(1, 10, 99, NewSearch(CAMDEN.display, sources=("Rightmove",)),
+                                   can_post=True)
+    assert search.sources == ("rightmove",)
+    search, _ = env.service.create(1, 10, 99, NewSearch("Chicago, IL", sources=("all sites",)),
+                                   can_post=True)
+    assert search.sources == ("zillow",)
+
+
+def test_check_notes_the_filters_a_source_cannot_apply(env, uk):
+    uk.filters = frozenset({Filter.PRICE})
+    env.service.create(1, 10, 99, NewSearch(CAMDEN.display, name="Flat", pets=Pets.CATS), can_post=True)
+    _, pending = env.service.check(1, "Flat")
+    assert pending.notes == ("Rightmove can't filter by pets, so you'll see all of its matches.",)
+
+
+PARIS = Area("Paris, Ile-de-France, France", "city", "FR", 48.8589, 2.3470)
+
+
+class FrenchAreas(FakeAreas):
+    """Also knows Paris, France (not placed on any Source yet)."""
+
+    def resolve(self, text: str) -> Area:
+        return PARIS if text == PARIS.display else super().resolve(text)
+
+
+def test_a_search_in_france_reads_bienici_with_prices_in_euros(env, fixture_html):
+    bienici = BieniciSource(FakeHttp(fixture_html("bienici/paris_flats_rent.json")), now=lambda: AT,
+                            lookup_http=FakeHttp(fixture_html("bienici/suggest_paris.json")))
+    env.service.sources = {**env.service.sources, "bienici": bienici}
+    env.service.runner = SearchRunner(env.service.sources, env.store, lambda s: env.notifiers[s.channel_id])
+    env.service.areas = FrenchAreas()
+    search, pending = env.service.create(1, 10, 99, NewSearch(PARIS.display, max_price=1500, min_beds=2,
+                                                              pets=Pets.CATS), can_post=True)
+    env.scheduler.run_pending()
+    assert search.sources == ("bienici",)
+    assert search.name == "Paris, Ile-de-France, France · 2+ bd · up to €1,500 · cats"
+    assert search.criteria.area.locations == {"bienici": {"zone_ids": "-7444", "slug": "paris-75000"}}
+    assert pending.notes == ("Bien'ici can't filter by pets, so you'll see all of its matches.",)
+    outcome = pending.wait(0)
+    assert [(r.source, r.total, r.seeded) for r in outcome.results] == [("bienici", 1365, True)]
+    assert env.notifiers[10].listings == []
+
+
+BERLIN = Area("Berlin, Berlin, Germany", "city", "DE", 52.5170, 13.3889)
+
+
+class GermanAreas(FakeAreas):
+    """Also knows Berlin, Germany (not placed on any Source yet)."""
+
+    def resolve(self, text: str) -> Area:
+        return BERLIN if text == BERLIN.display else super().resolve(text)
+
+
+def test_a_search_in_germany_reads_kleinanzeigen_with_beds_as_rooms_and_prices_in_euros(env, fixture_html):
+    run_http = FakeHttp(fixture_html("kleinanzeigen/berlin_3_rooms_newest.html"))
+    kleinanzeigen = KleinanzeigenSource(run_http, now=lambda: AT,
+                                        lookup_http=FakeHttp(fixture_html("kleinanzeigen/suggest_berlin.json")))
+    env.service.sources = {**env.service.sources, "kleinanzeigen": kleinanzeigen}
+    env.service.runner = SearchRunner(env.service.sources, env.store, lambda s: env.notifiers[s.channel_id])
+    env.service.areas = GermanAreas()
+    search, pending = env.service.create(1, 10, 99, NewSearch(BERLIN.display, max_price=1500, min_beds=2,
+                                                              min_baths=1), can_post=True)
+    env.scheduler.run_pending()
+    assert search.sources == ("kleinanzeigen",)
+    assert search.name == "Berlin, Berlin, Germany · 2+ bd · 1+ ba · up to €1,500"
+    assert search.criteria.area.locations == {"kleinanzeigen": {"location_id": 3331, "slug": "berlin"}}
+    assert pending.notes == ("Kleinanzeigen searches flats unless you pick House.",
+                             "Kleinanzeigen can't filter by baths, so you'll see all of its matches.")
+    outcome = pending.wait(0)
+    assert [(r.source, r.total, r.seeded) for r in outcome.results] == [("kleinanzeigen", 1732, True)]
+    assert run_http.requested[0] == (
+        "https://www.kleinanzeigen.de/s-wohnung-mieten/berlin/sortierung:neuste/anzeige:angebote/preis::1500/"
+        "c203l3331+wohnung_mieten.zimmer_d:3%2C")
+    assert env.notifiers[10].listings == []
+
+
+def test_a_source_that_searches_a_broader_area_says_so_in_every_reply(env, uk):
+    uk.place_note = "Rightmove doesn't know Camden, so it searches North London."
+    _, pending = env.service.create(1, 10, 99, NewSearch(CAMDEN.display, name="Flat"), can_post=True)
+    assert pending.notes == ("Rightmove doesn't know Camden, so it searches North London.",)
+    _, pending = env.service.edit(1, "Flat", SearchChanges(max_price=2000))
+    assert pending.notes == ("Rightmove doesn't know Camden, so it searches North London.",)
+    _, pending = env.service.check(1, "Flat")
+    assert pending.notes == ("Rightmove doesn't know Camden, so it searches North London.",)
+    assert uk.placed == [CAMDEN.display]
+
+
+def test_a_home_type_a_source_cannot_match_exactly_gets_its_note(env, uk):
+    uk.home_type_notes = {
+        HomeType.TOWNHOME: "Rightmove can't tell townhomes from houses, so you'll see all houses."}
+    _, pending = env.service.create(1, 10, 99, NewSearch(CAMDEN.display, home_type=HomeType.TOWNHOME,
+                                                         name="Flat"), can_post=True)
+    assert pending.notes == ("Rightmove can't tell townhomes from houses, so you'll see all houses.",)
+    _, pending = env.service.edit(1, "Flat", SearchChanges(home_type=HomeType.HOUSE))
+    assert pending.notes == ()

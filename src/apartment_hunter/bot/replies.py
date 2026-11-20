@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from apartment_hunter.countries import COUNTRIES
 from apartment_hunter.criteria import summarize
 from apartment_hunter.models import Search
 from apartment_hunter.runner import RunOutcome
@@ -27,8 +28,18 @@ def checking_reply(search: Search) -> str:
     return f'Checking {_names(search.sources)} for "{search.name}"…'
 
 
-def created_reply(search: Search, outcome: RunOutcome | None, interval_minutes: float) -> str:
-    """The reply to /search new once its Seeding run finished (or None: it's still going)."""
+def _with_notes(text: str, notes: tuple[str, ...]) -> str:
+    return " ".join((text, *notes))
+
+
+def created_reply(search: Search, outcome: RunOutcome | None, interval_minutes: float,
+                  notes: tuple[str, ...] = ()) -> str:
+    """The reply to /search new once its Seeding run finished (or None: it's still going), ending with
+    the service's notes (Sources left out, filters a Source can't apply)."""
+    return _with_notes(_created_text(search, outcome, interval_minutes), notes)
+
+
+def _created_text(search: Search, outcome: RunOutcome | None, interval_minutes: float) -> str:
     if outcome is None:
         return (f'⏳ Saved "{search.name}". '
                 "The first check is taking a while; I'll post here once it's done.")
@@ -48,10 +59,10 @@ def created_reply(search: Search, outcome: RunOutcome | None, interval_minutes: 
     return text
 
 
-def edited_reply(search: Search, reseeding: bool) -> str:
+def edited_reply(search: Search, reseeding: bool, notes: tuple[str, ...] = ()) -> str:
     if reseeding:
-        return (f'Updated "{search.name}". Its criteria changed, so it\'s taking a fresh look; '
-                "no alerts for what's already listed.")
+        return _with_notes(f'Updated "{search.name}". Its criteria changed, so it\'s taking a fresh look; '
+                           "no alerts for what's already listed.", notes)
     return f'Updated "{search.name}".'
 
 
@@ -71,8 +82,13 @@ def deleted_reply(name: str) -> str:
     return f'Deleted "{name}".'
 
 
-def checked_reply(search: Search, outcome: RunOutcome | None) -> str:
-    """The reply to /search check once its Run finished (or None: it's still going)."""
+def checked_reply(search: Search, outcome: RunOutcome | None, notes: tuple[str, ...] = ()) -> str:
+    """The reply to /search check once its Run finished (or None: it's still going), ending with the
+    service's notes (filters a Source can't apply)."""
+    return _with_notes(_checked_text(search, outcome), notes)
+
+
+def _checked_text(search: Search, outcome: RunOutcome | None) -> str:
     if outcome is None:
         return f'Still checking "{search.name}"; any alerts will show up in the channel.'
     n = outcome.alerts_sent
@@ -106,16 +122,26 @@ def _status_line(status: SearchStatus, now: datetime) -> str:
             f"{status.listings} seen · <#{search.channel_id}>")
 
 
+def coverage() -> list[str]:
+    """Each supported country with its Sources: "United Kingdom: Rightmove and Zoopla"."""
+    return [f"{c.name}: {_names(c.sources)}" for c in COUNTRIES.values()]
+
+
 def help_reply(limits: Limits, interval_minutes: float) -> str:
     """The reply to /search help."""
     return "\n".join([
-        "**Apartment Hunter** watches Zillow and Craigslist for rentals that match what you ask for and "
+        "**Apartment Hunter** watches rental sites for listings that match what you ask for and "
         "posts new listings and price drops in the channel where you started the search.",
         "",
+        "**Where it looks**",
+        *(f"• {line}, prices in {c.currency}"
+          for line, c in zip(coverage(), COUNTRIES.values(), strict=True)),
+        "",
         "**Commands**",
-        "• `/search new` starts a search here. Give it an area (a city, neighborhood or ZIP code) and, "
+        "• `/search new` starts a search here. Give it an area (a city, neighborhood or postcode) and, "
         "if you like, a price range, bedrooms, bathrooms, home type, pets and a name. "
-        "It checks both sites unless you pick one with `sources`. "
+        "A search checks every site for its country unless you pick one with `sources`. "
+        "Prices are monthly, in the area's currency, and bedrooms mean bedrooms, not rooms. "
         "The first check only takes note of what's already listed; after that, new places get posted.",
         "• `/search list` shows this server's searches and how they're doing.",
         "• `/search edit` changes a search. Changing what it looks for starts it fresh, quietly; "

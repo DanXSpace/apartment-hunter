@@ -23,6 +23,12 @@ def test_embed_price_drop():
     assert e["description"].endswith("📉 Price drop on Craigslist: $2,100 → $1,900")
 
 
+def test_embed_prices_in_the_search_currency():
+    e = build_embed(make_listing(price=1400, price_max=1650), "Camden", previous_price=1500, currency="£")
+    assert e["fields"][0]["value"] == "**£1,400 – £1,650/mo**"
+    assert e["description"].endswith("Price drop on Zillow: £1,500 → £1,400")
+
+
 def test_embed_unknown_price():
     embed = build_embed(make_listing(price=None), "Chicago")
     assert embed["fields"][0]["value"] == "Call for price"

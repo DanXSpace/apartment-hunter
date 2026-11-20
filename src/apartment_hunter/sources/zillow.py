@@ -10,12 +10,18 @@ from urllib.parse import quote
 
 from scrapling.parser import Selector
 
-from apartment_hunter.criteria import Criteria, HomeType, Pets
+from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, SourceLocation
+from apartment_hunter.geo import distance_miles
 from apartment_hunter.models import Listing
-from apartment_hunter.sources import BlockedError, ScrapeError, SourcePage
-from apartment_hunter.sources.http import HttpClient, raise_for_status
+from apartment_hunter.sources import ALL_FILTERS, NO_HOME_TYPE_NOTES, BlockedError, ScrapeError, SourcePage
+from apartment_hunter.sources.common import blocked, check_response, doesnt_know, layout_changed, look_up
+from apartment_hunter.sources.http import HttpClient
 
 SEARCH_URL = "https://www.zillow.com/homes/for_rent/"
+# Zillow's region types for the place kinds a Search accepts.
+ACCEPTED_KINDS = {"city": 6, "zipcode": 7, "neighborhood": 8}
+NAME = "Zillow"
+MAX_PLACE_MILES = 20  # a Zillow region farther than this from the Area is some other place
 _SITE = "https://www.zillow.com"
 
 _BASE_FILTERS: dict[str, Any] = {
@@ -49,18 +55,97 @@ _PET_FILTERS = {
     Pets.SMALL_DOGS: "onlyRentalSmallDogsAllowed",
     Pets.LARGE_DOGS: "onlyRentalLargeDogsAllowed",
 }
-_BLOCK_MARKERS =("px-captcha", "Press & Hold")
-_BLOCKED = (
-    "Zillow is blocking requests from this computer right now (bot protection). "
-    "This usually clears up on its own."
-)
-_LAYOUT_CHANGED = "Zillow's page layout changed, so listings couldn't be read. The bot needs an update."
+_BLOCK_MARKERS = ("px-captcha", "Press & Hold")
+_LAYOUT_CHANGED = layout_changed(NAME)
 
 
 @dataclass(frozen=True)
 class ZillowCard:
     listing: Listing
     home_type: str
+
+
+@dataclass(frozen=True)
+class Place:
+    """A city, neighborhood or ZIP code from Zillow's place lookup."""
+
+    display: str
+    kind: str
+    region_id: int
+    lat: float
+    lon: float
+
+
+@dataclass(frozen=True)
+class Suggestions:
+    """What the place lookup offered. `top_is_place` is True when Zillow's first result, before any
+    filtering, is one of `places` (an Address or a state listed first makes it False)."""
+
+    places: list[Place]
+    top_is_place: bool
+
+
+def suggestions_url(text: str) -> str:
+    return "https://www.zillowstatic.com/autocomplete/v3/suggestions?q=" + quote(text, safe="")
+
+
+def _place(result: object) -> Place | None:
+    """The result as a Place when it is a city, neighborhood or ZIP code; otherwise None."""
+    if not isinstance(result, dict) or result.get("resultType") != "Region":
+        return None
+    meta: dict[str, Any] = result.get("metaData") or {}
+    kind = meta.get("regionType")
+    if kind not in ACCEPTED_KINDS:
+        return None
+    try:
+        return Place(
+            str(result["display"]), kind, int(meta["regionId"]), float(meta["lat"]), float(meta["lng"])
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def read_suggestions(body: str) -> Suggestions:
+    try:
+        results = json.loads(body).get("results", [])
+    except (ValueError, AttributeError):
+        return Suggestions([], top_is_place=False)
+    found = [_place(result) for result in results]
+    places = [place for place in found if place is not None]
+    return Suggestions(places, top_is_place=bool(found) and found[0] is not None)
+
+
+def parse_suggestions(body: str) -> list[Place]:
+    return read_suggestions(body).places
+
+
+def place_query(area: Area) -> str:
+    """What to ask Zillow's place lookup for an Area: "Chicago, IL", "Lincoln Park, IL" or "60614".
+
+    Areas resolved by Photon read "Lincoln Park, IL, United States"; older ones "Chicago, IL"."""
+    parts = area.display.split(", ")
+    if len(parts) > 1 and parts[-1] == "United States":
+        parts = parts[:-1]
+    if area.kind == "zipcode" or len(parts) == 1:
+        return parts[0]
+    return f"{parts[0]}, {parts[-1]}"
+
+
+def nearby_place(found: Suggestions, area: Area, query: str) -> Place | None:
+    """The place called exactly `query`, or else the nearest place of the Area's kind within
+    MAX_PLACE_MILES of the Area; None when Zillow offered nothing like it near it. A place of another
+    kind (the city around a neighbourhood) would search a different area, so it never stands in."""
+    near = [p for p in found.places if distance_miles(area.lat, area.lon, p.lat, p.lon) <= MAX_PLACE_MILES]
+    exact = [p for p in near if p.display.casefold() == query.casefold()]
+    if exact:
+        return exact[0]
+    same_kind = [p for p in near if p.kind == area.kind]
+    return min(same_kind, key=lambda p: distance_miles(area.lat, area.lon, p.lat, p.lon), default=None)
+
+
+def look_up_places(http: HttpClient, text: str) -> Suggestions:
+    """One request to Zillow's place lookup; ScrapeError when it doesn't answer."""
+    return read_suggestions(look_up(http, suggestions_url(text), NAME))
 
 
 def search_url(criteria: Criteria, page: int = 1) -> str:
@@ -80,12 +165,13 @@ def search_url(criteria: Criteria, page: int = 1) -> str:
         filters[_PET_FILTERS[criteria.pets]] = {"value": True}
     for name in _EXCLUDED_HOME_TYPES.get(criteria.home_type, ()):
         filters[name] = {"value": False}
+    location = criteria.area.locations["zillow"]
     state = {
         "pagination": {"currentPage": page} if page > 1 else {},
         "isMapVisible": False,
         "isListVisible": True,
         "regionSelection": [
-            {"regionId": criteria.area.zillow_region_id, "regionType": criteria.area.zillow_region_type}
+            {"regionId": int(location["region_id"]), "regionType": int(location["region_type"])}
         ],
         "filterState": filters,
     }
@@ -140,7 +226,7 @@ def _card(raw: dict[str, Any], scraped_at: datetime) -> ZillowCard:
 
 def parse_search_page(html: str, scraped_at: datetime) -> tuple[list[ZillowCard], int | None, bool]:
     if any(marker in html for marker in _BLOCK_MARKERS):
-        raise BlockedError(_BLOCKED)
+        raise BlockedError(blocked(NAME))
     scripts = Selector(html).css("script#__NEXT_DATA__")
     if not scripts:
         raise ScrapeError(_LAYOUT_CHANGED)
@@ -158,20 +244,36 @@ def parse_search_page(html: str, scraped_at: datetime) -> tuple[list[ZillowCard]
 
 
 class ZillowSource:
-    key = "zillow"
+    """Reads Zillow. Places an Area on a Zillow region through Zillow's place lookup, using
+    `lookup_http` (default: the Runs' client) so placing needn't wait behind a Run's polite gaps."""
 
-    def __init__(self, http: HttpClient, now: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:
+    key = "zillow"
+    filters = ALL_FILTERS
+    home_type_notes = NO_HOME_TYPE_NOTES
+
+    def __init__(
+        self,
+        http: HttpClient,
+        now: Callable[[], datetime] = lambda: datetime.now(UTC),
+        lookup_http: HttpClient | None = None,
+    ) -> None:
         self._http = http
         self._now = now
+        self._lookup_http = lookup_http or http
+
+    def place(self, area: Area) -> SourceLocation:
+        query = place_query(area)
+        found = nearby_place(look_up_places(self._lookup_http, query), area, query)
+        if found is None:
+            raise doesnt_know(NAME, area)
+        return {"region_id": found.region_id, "region_type": ACCEPTED_KINDS[found.kind]}
 
     def results_url(self, criteria: Criteria) -> str:
         return search_url(criteria, 1)
 
     def fetch(self, criteria: Criteria, page: int) -> SourcePage:
         response = self._http.get(search_url(criteria, page))
-        raise_for_status(
-            response, blocked=_BLOCKED, failed=f"Zillow answered with an error (HTTP {response.status})."
-        )
+        check_response(response, NAME)
         cards, total, has_more = parse_search_page(response.text, self._now())
         listings = [c.listing for c in cards if matches_home_type(c.home_type, criteria.home_type)]
         return SourcePage(listings, total, has_more)

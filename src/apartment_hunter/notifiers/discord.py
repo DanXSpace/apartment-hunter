@@ -23,11 +23,13 @@ def _beds(v: float) -> str:
     return "Studio" if v == 0 else _num(v)
 
 
-def _price(v: float) -> str:
-    return f"${int(v):,}"
+def build_embed(listing: Listing, search_name: str, previous_price: int | None = None,
+                currency: str = "$") -> dict:
+    """The Alert embed. `currency` is the symbol of the Search's country ("$", "£", "€")."""
 
+    def _price(v: float) -> str:
+        return f"{currency}{int(v):,}"
 
-def build_embed(listing: Listing, search_name: str, previous_price: int | None = None) -> dict:
     source = SOURCE_NAMES.get(listing.source, listing.source)
     if previous_price is not None and listing.price_min is not None:
         description = f"📉 Price drop on {source}: {_price(previous_price)} → {_price(listing.price_min)}"

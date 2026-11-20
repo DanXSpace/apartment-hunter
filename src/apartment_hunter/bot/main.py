@@ -9,24 +9,36 @@ import os
 from dotenv import load_dotenv
 
 from apartment_hunter.appdata import LOG_FORMAT, AlreadyRunning, DataDir
-from apartment_hunter.areas import AreaLookup
+from apartment_hunter.areas import PHOTON_USER_AGENT, AreaLookup
 from apartment_hunter.bot.app import build_client
 from apartment_hunter.bot.posting import ChannelNotifier, DiscordBridge
+from apartment_hunter.bot.replies import coverage
+from apartment_hunter.countries import country
 from apartment_hunter.runner import SearchRunner
 from apartment_hunter.scheduler import Scheduler
 from apartment_hunter.service import Limits, SearchService
 from apartment_hunter.settings import BotSettings, SettingsError, load_settings
 from apartment_hunter.sources import Source
+from apartment_hunter.sources.bienici import BieniciSource
 from apartment_hunter.sources.craigslist import CraigslistSource
+from apartment_hunter.sources.fotocasa import FotocasaSource
 from apartment_hunter.sources.http import CurlHttpClient, PoliteHttpClient
+from apartment_hunter.sources.idealista import ITALY, PORTUGAL, IdealistaSource
+from apartment_hunter.sources.kleinanzeigen import KleinanzeigenSource
+from apartment_hunter.sources.pararius import ParariusSource
+from apartment_hunter.sources.rightmove import RightmoveSource
 from apartment_hunter.sources.zillow import ZillowSource
+from apartment_hunter.sources.zoopla import ZooplaSource
 from apartment_hunter.storage import Store
 
 log = logging.getLogger("apartment_hunter")
 
 DESCRIPTION = """\
 Run the Apartment Hunter Discord bot. People add it to their server and use /search to get new
-Zillow and Craigslist rentals posted in a channel (the sources option picks one site or both).
+rentals posted in a channel. A search reads every site for its area's country (the sources
+option picks one):
+
+""" + "".join(f"  {line}\n" for line in coverage()) + """
 
 Settings come from environment variables, or from a .env file in the project folder
 (see .env.example). DISCORD_TOKEN is required.
@@ -61,14 +73,29 @@ def _run(settings: BotSettings, data: DataDir) -> int:
     store = Store(data.database)
     run_http = PoliteHttpClient(CurlHttpClient())
     # Autocomplete must answer within Discord's 3 seconds, so lookups never wait behind polite gaps.
-    areas = AreaLookup(CurlHttpClient(timeout=2.5))
-    sources: dict[str, Source] = {"zillow": ZillowSource(run_http), "craigslist": CraigslistSource(run_http)}
+    areas = AreaLookup(CurlHttpClient(timeout=2.5, headers={"User-Agent": PHOTON_USER_AGENT}))
+    # Placing an Area (once per create or Area edit) is spaced politely too, but by its own client so it
+    # doesn't queue behind a Run; the create/edit reply is deferred, so the wait is fine.
+    place_http = PoliteHttpClient(CurlHttpClient())
+    sources: dict[str, Source] = {
+        "zillow": ZillowSource(run_http, lookup_http=place_http),
+        "craigslist": CraigslistSource(run_http),
+        "rightmove": RightmoveSource(run_http, lookup_http=place_http),
+        "zoopla": ZooplaSource(run_http, lookup_http=place_http),
+        "idealista_it": IdealistaSource(ITALY, run_http),
+        "idealista_pt": IdealistaSource(PORTUGAL, run_http),
+        "bienici": BieniciSource(run_http, lookup_http=place_http),
+        "kleinanzeigen": KleinanzeigenSource(run_http, lookup_http=place_http),
+        "fotocasa": FotocasaSource(run_http, lookup_http=place_http),
+        "pararius": ParariusSource(run_http, lookup_http=place_http),
+    }
 
     # The lambdas look `bridge` and `service` up when called, after all of them exist.
-    runner = SearchRunner(sources, store, lambda search: ChannelNotifier(bridge, search.channel_id))
+    runner = SearchRunner(sources, store, lambda search: ChannelNotifier(
+        bridge, search.channel_id, country(search.criteria.area.country).currency))
     scheduler = Scheduler(lambda search_id: service.run(search_id), settings.interval_minutes)
     service = SearchService(
-        store=store, runner=runner, scheduler=scheduler, areas=areas, source_keys=tuple(sources),
+        store=store, runner=runner, scheduler=scheduler, areas=areas, sources=sources,
         limits=Limits(per_server=settings.per_server, total=settings.total),
         interval_minutes=settings.interval_minutes,
         direct_message=lambda user_id, text: bridge.direct_message(user_id, text),

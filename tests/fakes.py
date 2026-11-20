@@ -1,7 +1,7 @@
-from apartment_hunter.criteria import Criteria
+from apartment_hunter.criteria import Area, Criteria, HomeType, SourceLocation
 from apartment_hunter.models import Listing
 from apartment_hunter.notifiers import ChannelGone, NotifyError
-from apartment_hunter.sources import SourcePage
+from apartment_hunter.sources import ALL_FILTERS, PLACE_NOTE, CantPlace, SourcePage
 from apartment_hunter.sources.http import HttpResponse
 
 _OK = HttpResponse(200, "ok")
@@ -33,20 +33,54 @@ class FakeHttp:
         return self.response
 
 
+class ScriptedHttp:
+    """Returns its responses in turn, one per request, and records the URLs it was asked for."""
+
+    def __init__(self, *responses: HttpResponse | str) -> None:
+        self.responses = [HttpResponse(200, r) if isinstance(r, str) else r for r in responses]
+        self.requested: list[str] = []
+
+    def get(self, url: str) -> HttpResponse:
+        self.requested.append(url)
+        return self.responses.pop(0)
+
+
 class FakeSource:
     """Serves scripted pages, one per `fetch`, and records the page numbers it was asked for.
 
     Each item in `pages` is a `SourcePage`, a list of Listings (one page holding all of them, with
     nothing more), or an exception to raise.
+
+    `place` gives every Area the location {"at": <area display>} and records the Areas it placed;
+    set `cant_place` to a reason to refuse instead, or `place_note` to say it searches a broader area.
+    `filters` is what it can filter by (all of it unless a test narrows it); `home_type_notes` what it
+    says about home types it can't match exactly. `locations` records the source location each `fetch`
+    was given.
     """
 
     def __init__(self, key: str) -> None:
         self.key = key
+        self.filters = ALL_FILTERS
+        self.home_type_notes: dict[HomeType, str] = {}
         self.pages: list[SourcePage | list[Listing] | Exception] = []
         self.requested: list[int] = []
+        self.placed: list[str] = []
+        self.cant_place: str | None = None
+        self.place_note: str | None = None
+        self.locations: list[SourceLocation | None] = []
+
+    def place(self, area: Area) -> SourceLocation:
+        self.placed.append(area.display)
+        if self.cant_place is not None:
+            raise CantPlace(self.cant_place)
+        location: SourceLocation = {"at": area.display}
+        if self.place_note is not None:
+            location[PLACE_NOTE] = self.place_note
+        return location
 
     def fetch(self, criteria: Criteria, page: int) -> SourcePage:
         self.requested.append(page)
+        self.locations.append(criteria.area.locations.get(self.key))
         item = self.pages.pop(0)
         if isinstance(item, Exception):
             raise item

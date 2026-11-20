@@ -1,9 +1,16 @@
+from dataclasses import replace
+
 import pytest
 
-from apartment_hunter.criteria import Criteria, HomeType, Pets
+from apartment_hunter.criteria import Area, Criteria, HomeType, Pets
 from apartment_hunter.models import Listing
 from apartment_hunter.sources import BlockedError, ScrapeError, SourcePage
-from apartment_hunter.sources.craigslist import CraigslistSource, parse_search_page, search_url
+from apartment_hunter.sources.craigslist import (
+    CraigslistSite,
+    CraigslistSource,
+    parse_search_page,
+    search_url,
+)
 from apartment_hunter.sources.http import HttpResponse
 from conftest import AT, CHICAGO, LINCOLN_PARK
 from fakes import FakeHttp
@@ -78,3 +85,22 @@ def test_parses_a_saved_real_page(fixture_html):
     listings = parse_search_page(fixture_html("craigslist/chicago_apa.html"), AT)
     assert len(listings) == 5
     assert all(x.listing_id and x.url.startswith("https://www.craigslist.org/") and x.name for x in listings)
+
+
+SITES = [
+    CraigslistSite("chicago", 41.849998, -87.650002),
+    CraigslistSite("newyork", 40.7166, -74.0),
+    CraigslistSite("milwaukee", 43.0389, -87.9065),
+]
+
+
+def test_place_picks_the_nearest_site_with_a_radius_by_the_kind_of_place():
+    source = CraigslistSource(FakeHttp(), now=lambda: AT, sites=SITES)
+    assert source.place(replace(CHICAGO, locations={})) == {"site": "chicago", "radius_miles": 10}
+    assert source.place(replace(LINCOLN_PARK, locations={})) == {"site": "chicago", "radius_miles": 2}
+    milwaukee = Area("Milwaukee, WI", "city", "US", 43.05, -87.95)
+    assert source.place(milwaukee) == {"site": "milwaukee", "radius_miles": 10}
+
+
+def test_bundled_sites_include_chicago():
+    assert CraigslistSource(FakeHttp()).place(replace(CHICAGO, locations={}))["site"] == "chicago"

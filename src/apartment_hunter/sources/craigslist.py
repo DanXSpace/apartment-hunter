@@ -1,17 +1,25 @@
 """The Craigslist Source: Criteria into a newest-first apartment search, and its static list into Listings."""
 
+import json
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from importlib import resources
 from urllib.parse import urlencode
 
 from scrapling.parser import Selector
 
-from apartment_hunter.criteria import Criteria, HomeType, Pets
+from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, SourceLocation
+from apartment_hunter.geo import distance_miles
 from apartment_hunter.models import Listing
-from apartment_hunter.sources import ScrapeError, SourcePage
+from apartment_hunter.sources import ALL_FILTERS, NO_HOME_TYPE_NOTES, ScrapeError, SourcePage
+from apartment_hunter.sources.common import http_error, layout_changed
 from apartment_hunter.sources.http import HttpClient, raise_for_status
 from apartment_hunter.text import plain_number
+
+CITY_RADIUS_MILES = 10
+SMALL_RADIUS_MILES = 2
 
 # Craigslist's apartment, condo, flat, loft / cottage, duplex, house / townhouse.
 HOUSING_TYPES = {
@@ -19,21 +27,37 @@ HOUSING_TYPES = {
     HomeType.HOUSE: (3, 4, 6),
     HomeType.TOWNHOME: (9,),
 }
+NAME = "Craigslist"
+# Worded as in the US release, without "(bot protection)".
 _BLOCKED = (
     "Craigslist is blocking requests from this computer right now. This usually clears up on its own."
 )
-_LAYOUT_CHANGED = (
-    "Craigslist's page layout changed, so listings couldn't be read. The bot needs an update."
-)
+
+
+@dataclass(frozen=True)
+class CraigslistSite:
+    hostname: str
+    lat: float
+    lon: float
+
+
+def load_craigslist_sites() -> list[CraigslistSite]:
+    text = (resources.files("apartment_hunter.sources") / "craigslist_sites.json").read_text()
+    return [CraigslistSite(s["hostname"], s["lat"], s["lon"]) for s in json.loads(text)]
+
+
+def nearest_craigslist_site(lat: float, lon: float, sites: Sequence[CraigslistSite]) -> str:
+    return min(sites, key=lambda s: distance_miles(lat, lon, s.lat, s.lon)).hostname
 
 
 def search_url(criteria: Criteria) -> str:
     area = criteria.area
+    location = area.locations["craigslist"]
     params: list[tuple[str, str]] = [
         ("sort", "date"),
         ("lat", str(area.lat)),
         ("lon", str(area.lon)),
-        ("search_distance", str(area.craigslist_radius_miles)),
+        ("search_distance", str(location["radius_miles"])),
     ]
     if criteria.min_price is not None:
         params.append(("min_price", plain_number(criteria.min_price)))
@@ -48,7 +72,7 @@ def search_url(criteria: Criteria) -> str:
     elif criteria.pets is Pets.CATS:
         params.append(("pets_cat", "1"))
     params.extend(("housing_type", str(code)) for code in HOUSING_TYPES.get(criteria.home_type, ()))
-    return f"https://{area.craigslist_site}.craigslist.org/search/apa?" + urlencode(params)
+    return f"https://{location['site']}.craigslist.org/search/apa?" + urlencode(params)
 
 
 def _text(node: Selector, css: str) -> str:
@@ -59,7 +83,7 @@ def _text(node: Selector, css: str) -> str:
 def parse_search_page(html: str, scraped_at: datetime) -> list[Listing]:
     lists = Selector(html).css("ol.cl-static-search-results")
     if not lists:
-        raise ScrapeError(_LAYOUT_CHANGED)
+        raise ScrapeError(layout_changed(NAME))
     listings = []
     for item in lists[0].css("li.cl-static-search-result"):
         links = item.css("a")
@@ -78,11 +102,25 @@ def parse_search_page(html: str, scraped_at: datetime) -> list[Listing]:
 
 
 class CraigslistSource:
-    key = "craigslist"
+    """Reads Craigslist. Places an Area on the nearest Craigslist site, with a radius by its kind."""
 
-    def __init__(self, http: HttpClient, now: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:
+    key = "craigslist"
+    filters = ALL_FILTERS
+    home_type_notes = NO_HOME_TYPE_NOTES
+
+    def __init__(
+        self,
+        http: HttpClient,
+        now: Callable[[], datetime] = lambda: datetime.now(UTC),
+        sites: Sequence[CraigslistSite] | None = None,
+    ) -> None:
         self._http = http
         self._now = now
+        self._sites = list(sites) if sites is not None else load_craigslist_sites()
+
+    def place(self, area: Area) -> SourceLocation:
+        radius = CITY_RADIUS_MILES if area.kind == "city" else SMALL_RADIUS_MILES
+        return {"site": nearest_craigslist_site(area.lat, area.lon, self._sites), "radius_miles": radius}
 
     def results_url(self, criteria: Criteria) -> str:
         return search_url(criteria)
@@ -91,7 +129,5 @@ class CraigslistSource:
         if page > 1:
             return SourcePage([], None, False)
         response = self._http.get(search_url(criteria))
-        raise_for_status(
-            response, blocked=_BLOCKED, failed=f"Craigslist answered with an error (HTTP {response.status})."
-        )
+        raise_for_status(response, blocked=_BLOCKED, failed=http_error(NAME, response.status))
         return SourcePage(parse_search_page(response.text, self._now()), None, False)
