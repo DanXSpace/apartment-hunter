@@ -10,7 +10,7 @@ from apartment_hunter.sources import BlockedError, CantPlace, Filter, ScrapeErro
 from apartment_hunter.sources.http import HttpResponse
 from apartment_hunter.sources.rightmove import RightmoveSource
 from conftest import AT
-from fakes import FakeHttp
+from fakes import FakeHttp, ScriptedHttp
 
 CAMDEN_TOWN = Area("Camden Town, London, United Kingdom", "neighborhood", "GB", 51.5390, -0.1426, locations={
     "rightmove": {"location_id": "REGION^85262", "radius_miles": 0.0},
@@ -153,12 +153,32 @@ OUTCODES = ("<TypeaheadDTO><matches>"
             "</matches></TypeaheadDTO>")
 
 
-def test_place_finds_a_postcode_by_its_outward_code():
-    lookups = FakeHttp(OUTCODES)
+SW11_6HR = Area("SW11 6HR, London, United Kingdom", "zipcode", "GB", 51.47, -0.16)
+NO_MATCHES = "<TypeaheadDTO><matches/></TypeaheadDTO>"
+
+
+def test_place_finds_a_full_postcode_as_rightmoves_postcode_location(fixture_html):
+    lookups = FakeHttp(fixture_html("rightmove/typeahead_sw11_6hr.xml"))
     rightmove = RightmoveSource(FakeHttp(), now=lambda: AT, lookup_http=lookups)
-    sw11 = Area("SW11 6HR, London, United Kingdom", "zipcode", "GB", 51.47, -0.16)
-    assert rightmove.place(sw11) == {"location_id": "OUTCODE^2497", "radius_miles": 0.0}
-    assert lookups.requested[0].startswith("https://los.rightmove.co.uk/typeahead?query=SW11&")
+    assert rightmove.place(SW11_6HR) == {"location_id": "POSTCODE^832581", "radius_miles": 0.25}
+    assert lookups.requested == [
+        "https://los.rightmove.co.uk/typeahead?query=SW11%206HR&limit=10&exclude=STREET"]
+
+
+def test_a_postcode_rightmove_does_not_offer_falls_back_to_its_outward_code_and_says_so():
+    lookups = ScriptedHttp(NO_MATCHES, OUTCODES)
+    rightmove = RightmoveSource(FakeHttp(), now=lambda: AT, lookup_http=lookups)
+    assert rightmove.place(SW11_6HR) == {
+        "location_id": "OUTCODE^2497", "radius_miles": 0.0,
+        "note": "Rightmove doesn't know SW11 6HR, so it searches all of SW11."}
+    assert lookups.requested[1] == "https://los.rightmove.co.uk/typeahead?query=SW11&limit=10&exclude=STREET"
+
+
+def test_a_postcode_rightmove_does_not_know_at_all_is_left_out():
+    rightmove = RightmoveSource(FakeHttp(), now=lambda: AT, lookup_http=ScriptedHttp(NO_MATCHES, NO_MATCHES))
+    with pytest.raises(CantPlace) as refused:
+        rightmove.place(SW11_6HR)
+    assert str(refused.value) == "Rightmove doesn't know SW11 6HR, London, United Kingdom."
 
 
 def test_place_refuses_a_place_rightmove_does_not_know(fixture_html):

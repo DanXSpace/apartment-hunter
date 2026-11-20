@@ -16,6 +16,7 @@ from apartment_hunter.criteria import Area, Criteria, HomeType, SourceLocation
 from apartment_hunter.models import Listing
 from apartment_hunter.sources import (
     NO_HOME_TYPE_NOTES,
+    PLACE_NOTE,
     BlockedError,
     CantPlace,
     Filter,
@@ -79,13 +80,6 @@ def parse_typeahead(body: str) -> list[RightmoveLocation]:
         if kind in LOCATION_RADIUS and id_ and display:
             found.append(RightmoveLocation(kind, id_, display))
     return found
-
-
-def typeahead_query(area: Area) -> str:
-    """What to type into Rightmove's typeahead: the place's own name, or a postcode's outward code
-    ("SW11" for "SW11 6HR"), which is the district a person typing a postcode means."""
-    name = area.display.split(", ")[0]
-    return name.split(" ")[0] if area.kind == "zipcode" else name
 
 
 def best_location(found: list[RightmoveLocation], area: Area, query: str) -> RightmoveLocation | None:
@@ -185,16 +179,27 @@ class RightmoveSource:
         self._lookup_http = lookup_http or http
 
     def place(self, area: Area) -> SourceLocation:
-        query = typeahead_query(area)
+        """The location named like the Area's own name. A full postcode is searched as Rightmove's
+        postcode location when the typeahead offers it, else as its outward code ("SW11" for
+        "SW11 6HR"), with a note saying so."""
+        name = area.display.split(", ")[0]
+        found = self._look_up(area, name)
+        if found is not None:
+            return {"location_id": found.identifier, "radius_miles": LOCATION_RADIUS[found.kind]}
+        outward = name.split(" ")[0]
+        found = self._look_up(area, outward) if area.kind == "zipcode" and outward != name else None
+        if found is None:
+            raise CantPlace(f"Rightmove doesn't know {area.display}.")
+        return {"location_id": found.identifier, "radius_miles": LOCATION_RADIUS[found.kind],
+                PLACE_NOTE: f"Rightmove doesn't know {name}, so it searches all of {outward}."}
+
+    def _look_up(self, area: Area, query: str) -> RightmoveLocation | None:
         try:
             response = self._lookup_http.get(typeahead_url(query))
         except ScrapeError as error:
             raise ScrapeError(LOOKUP_DOWN) from error
         raise_for_status(response, blocked=LOOKUP_DOWN, failed=LOOKUP_DOWN)
-        found = best_location(parse_typeahead(response.text), area, query)
-        if found is None:
-            raise CantPlace(f"Rightmove doesn't know {area.display}.")
-        return {"location_id": found.identifier, "radius_miles": LOCATION_RADIUS[found.kind]}
+        return best_location(parse_typeahead(response.text), area, query)
 
     def results_url(self, criteria: Criteria) -> str:
         return search_url(criteria, 1)

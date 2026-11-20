@@ -33,6 +33,18 @@ class FakeHttp:
         return self.response
 
 
+class ScriptedHttp:
+    """Returns its responses in turn, one per request, and records the URLs it was asked for."""
+
+    def __init__(self, *responses: HttpResponse | str) -> None:
+        self.responses = [HttpResponse(200, r) if isinstance(r, str) else r for r in responses]
+        self.requested: list[str] = []
+
+    def get(self, url: str) -> HttpResponse:
+        self.requested.append(url)
+        return self.responses.pop(0)
+
+
 class FakeSource:
     """Serves scripted pages, one per `fetch`, and records the page numbers it was asked for.
 
