@@ -5,7 +5,6 @@ results page's embedded data."""
 import json
 import math
 import re
-import unicodedata
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -15,18 +14,22 @@ from scrapling.parser import Selector
 
 from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, SourceLocation
 from apartment_hunter.models import Listing
-from apartment_hunter.sources import (
-    NO_HOME_TYPE_NOTES,
-    BlockedError,
-    CantPlace,
-    Filter,
-    ScrapeError,
-    SourcePage,
+from apartment_hunter.sources import NO_HOME_TYPE_NOTES, Filter, ScrapeError, SourcePage
+from apartment_hunter.sources.common import (
+    check_response,
+    doesnt_know,
+    layout_changed,
+    look_up,
+    no_postcodes,
+    same_name,
+    slug,
+    unreadable,
 )
-from apartment_hunter.sources.http import HttpClient, raise_for_status
+from apartment_hunter.sources.http import HttpClient
 from apartment_hunter.text import plain_number
 
 _SITE = "https://www.fotocasa.es"
+NAME = "Fotocasa"
 NEWEST_FIRST = "publicationDate"  # Fotocasa's sortType for "most recent"
 # Property types as Fotocasa's path segment ("viviendas" is every kind of home).
 PROPERTY_TYPES = {
@@ -43,23 +46,13 @@ SPANISH_NAMES = {"Seville": "Sevilla", "Saragossa": "Zaragoza", "Corunna": "A Co
 LOOKUP_DOWN = (
     "Fotocasa isn't answering right now, so its places couldn't be looked up. Try again in a few minutes."
 )
-_BLOCK_MARKERS =("captcha-delivery", "Access Denied", "captcha")
-_LAYOUT_CHANGED = "Fotocasa's page layout changed, so listings couldn't be read. The bot needs an update."
-_BLOCKED = (
-    "Fotocasa is blocking requests from this computer right now (bot protection). "
-    "This usually clears up on its own."
-)
-
-
-def slug(text: str) -> str:
-    """Fotocasa's URL spelling of a name: "Barrio de Salamanca" is "barrio-de-salamanca", "Chamberí"
-    is "chamberi"."""
-    plain = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
-    return re.sub(r"[^a-z0-9]+", "-", plain.casefold()).strip("-")
+_BLOCK_MARKERS = ("captcha-delivery", "Access Denied", "captcha")
+_LAYOUT_CHANGED = layout_changed(NAME)
 
 
 def city_url(city: str) -> str:
-    """The page of every rental in a city, which also lists the city's districts and neighbourhoods."""
+    """The page of every rental in a city, which also lists the city's districts and neighbourhoods.
+    Fotocasa writes names as slugs: "Barrio de Salamanca" is "barrio-de-salamanca"."""
     return f"{_SITE}/es/alquiler/viviendas/{slug(SPANISH_NAMES.get(city, city))}/todas-las-zonas/l"
 
 
@@ -85,7 +78,7 @@ def find_zone(html: str, name: str | None) -> str | None:
             return f"{city}/todas-las-zonas"
         facets = props["initialSearch"]["result"]["resultsV2"]["locationFacets"]["edistricts"]
         for zone in _zones(facets):
-            if slug(str(zone.get("literal") or "")) == slug(name) and zone.get("segments"):
+            if same_name(str(zone.get("literal") or ""), name) and zone.get("segments"):
                 return str(zone["segments"])
     except (ScrapeError, KeyError, TypeError, AttributeError):
         return None
@@ -162,10 +155,8 @@ def parse_search_page(html: str, scraped_at: datetime) -> SourcePage:
     """The results page's Listings, newest first. Sorted by date, Fotocasa's paid "top" adverts stay in
     their place in the list, so none are left out."""
     props = _props(html)
-    if props is None:  # look for a block page only here: a listing's own text could hold the words
-        if any(marker in html for marker in _BLOCK_MARKERS):
-            raise BlockedError(_BLOCKED)
-        raise ScrapeError(_LAYOUT_CHANGED)
+    if props is None:
+        raise unreadable(html, NAME, _BLOCK_MARKERS)
     try:
         result = props["initialSearch"]["result"]
         listings = [_listing(raw, scraped_at) for raw in result["realEstates"]]
@@ -201,19 +192,14 @@ class FotocasaSource:
         page, e.g. "madrid" to "madrid-capital"); a district or neighbourhood is then looked up among
         that page's zones by name."""
         if area.kind == "zipcode":
-            raise CantPlace("Fotocasa can't search by postcode. Try the district or city instead.")
-        parts = area.display.split(", ")
-        name, city = parts[0], parts[0] if area.kind == "city" or len(parts) < 3 else parts[1]
-        try:
-            response = self._lookup_http.get(city_url(city))
-        except ScrapeError as error:
-            raise ScrapeError(LOOKUP_DOWN) from error
-        if response.status == 404:
-            raise CantPlace(f"Fotocasa doesn't know {area.display}.")
-        raise_for_status(response, blocked=LOOKUP_DOWN, failed=LOOKUP_DOWN)
-        path = find_zone(response.text, None if area.kind == "city" else name)
+            raise no_postcodes(NAME, "the district or city")
+        city = area.context[0] if area.kind != "city" and area.context else area.name
+        unknown = str(doesnt_know(NAME, area))
+        answer = look_up(self._lookup_http, city_url(city), NAME, down=LOOKUP_DOWN,
+                         left_out=lambda status: unknown if status == 404 else None)
+        path = find_zone(answer, None if area.kind == "city" else area.name)
         if path is None:
-            raise CantPlace(f"Fotocasa doesn't know {area.display}.")
+            raise doesnt_know(NAME, area)
         return {"path": path}
 
     def results_url(self, criteria: Criteria) -> str:
@@ -221,7 +207,5 @@ class FotocasaSource:
 
     def fetch(self, criteria: Criteria, page: int) -> SourcePage:
         response = self._http.get(search_url(criteria, page))
-        raise_for_status(
-            response, blocked=_BLOCKED, failed=f"Fotocasa answered with an error (HTTP {response.status})."
-        )
+        check_response(response, NAME)
         return parse_search_page(response.text, self._now())

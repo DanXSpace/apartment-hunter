@@ -15,29 +15,28 @@ from scrapling.parser import Selector
 
 from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, SourceLocation
 from apartment_hunter.models import Listing
-from apartment_hunter.sources import (
-    BlockedError,
-    CantPlace,
-    Filter,
-    ScrapeError,
-    SourcePage,
+from apartment_hunter.sources import Filter, ScrapeError, SourcePage
+from apartment_hunter.sources.common import (
+    check_response,
+    doesnt_know,
+    in_context,
+    layout_changed,
+    look_up,
+    no_postcodes,
+    same_name,
+    unreadable,
 )
-from apartment_hunter.sources.http import HttpClient, raise_for_status
+from apartment_hunter.sources.http import HttpClient
 
 _SITE = "https://www.pararius.com"
 SUGGEST_URL = f"{_SITE}/api/suggest"
 PLACE_KINDS = ("city", "city_area", "neighbourhood", "district")  # the suggestions a Search can use
-LOOKUP_DOWN = "Pararius's place lookup isn't answering right now. Try again in a few minutes."
-NO_POSTCODES = "Pararius can't search by postcode. Try the neighbourhood or city instead."
+NAME = "Pararius"
 # The kinds of place below a city that Pararius searches, as the path segment each one takes.
 PLACE_SEGMENTS = {"city_area": "city-area", "district": "district", "neighbourhood": "neighbourhood"}
 DWELLING_TYPES = {HomeType.APARTMENT_CONDO: "apartment", HomeType.HOUSE: "house", HomeType.TOWNHOME: "house"}
 _BLOCK_MARKERS = ("captcha", "Just a moment", "Access Denied")
-_BLOCKED = (
-    "Pararius is blocking requests from this computer right now (bot protection). "
-    "This usually clears up on its own."
-)
-_LAYOUT_CHANGED = "Pararius's page layout changed, so listings couldn't be read. The bot needs an update."
+_LAYOUT_CHANGED = layout_changed(NAME)
 NEWEST_FIRST = "published_at.desc"  # the sort Pararius selects by default ("Newest first")
 NO_MAXIMUM = 60000  # how Pararius writes a price range with no maximum ("2000-60000")
 
@@ -59,17 +58,13 @@ def best_suggestion(found: list[dict[str, Any]], area: Area) -> dict[str, Any] |
     """The suggestion named like the Area's own name, preferring one in the rest of the Area ("De Pijp,
     Amsterdam" over "De Pijp, Beverwijk"), then one of the same kind (a city for a city). City areas
     carry their city's name in front ("The Hague Centrum"). None when nothing is named so."""
-    name = area.display.split(", ")[0].casefold()
-    context = [part.casefold() for part in area.display.split(", ")[1:-1]]
-
     def named(suggestion: dict[str, Any]) -> bool:
-        own = str(suggestion["value"]).split(", ")[0].casefold()
-        return own == name or any(own == f"{part} {name}" for part in context)
+        own = str(suggestion["value"]).split(", ")[0]
+        return any(same_name(own, name) for name in (area.name, *(f"{c} {area.name}" for c in area.context)))
 
     def rank(suggestion: dict[str, Any]) -> tuple[bool, bool]:
-        in_context = any(part in str(suggestion["value"]).casefold() for part in context)
         same_kind = (suggestion["type"] == "city") == (area.kind == "city")
-        return not in_context, not same_kind
+        return not in_context(str(suggestion["value"]), area), not same_kind
 
     matches = sorted((s for s in found if named(s)), key=rank)
     return matches[0] if matches else None
@@ -150,10 +145,8 @@ def parse_search_page(
     no matches answers with the whole city's, and a page past the last one with page 1. Those answers
     are read as an empty page so they aren't taken for this place's Listings."""
     page = Selector(html)
-    if not page.css(".search-list-header__count"):  # look for a block page only here
-        if any(marker in html for marker in _BLOCK_MARKERS):
-            raise BlockedError(_BLOCKED)
-        raise ScrapeError(_LAYOUT_CHANGED)
+    if not page.css(".search-list-header__count"):
+        raise unreadable(html, NAME, _BLOCK_MARKERS)
     try:
         searched = _searched(page, "data-search-page-filters")["filters"]
         shown = _searched(page, "data-search-page-view-options")["view_options"]["page"]
@@ -190,15 +183,11 @@ class ParariusSource:
 
     def place(self, area: Area) -> SourceLocation:
         if area.kind == "zipcode":
-            raise CantPlace(NO_POSTCODES)
-        try:
-            response = self._lookup_http.get(suggest_url(area.display.split(", ")[0]))
-        except ScrapeError as error:
-            raise ScrapeError(LOOKUP_DOWN) from error
-        raise_for_status(response, blocked=LOOKUP_DOWN, failed=LOOKUP_DOWN)
-        found = best_suggestion(parse_suggestions(response.text), area)
+            raise no_postcodes(NAME, "the neighbourhood or city")
+        answer = look_up(self._lookup_http, suggest_url(area.name), NAME)
+        found = best_suggestion(parse_suggestions(answer), area)
         if found is None:
-            raise CantPlace(f"Pararius doesn't know {area.display}.")
+            raise doesnt_know(NAME, area)
         filters = found["filters"]
         location: SourceLocation = {"city": str(filters["city"])}
         location.update({kind: str(filters[kind]) for kind in PLACE_SEGMENTS if filters.get(kind)})
@@ -209,7 +198,5 @@ class ParariusSource:
 
     def fetch(self, criteria: Criteria, page: int) -> SourcePage:
         response = self._http.get(search_url(criteria, page))
-        raise_for_status(
-            response, blocked=_BLOCKED, failed=f"Pararius answered with an error (HTTP {response.status})."
-        )
+        check_response(response, NAME)
         return parse_search_page(response.text, self._now(), criteria.area.locations[self.key], page)

@@ -14,14 +14,17 @@ from scrapling.parser import Selector
 
 from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, SourceLocation
 from apartment_hunter.models import Listing
-from apartment_hunter.sources import (
-    BlockedError,
-    CantPlace,
-    Filter,
-    ScrapeError,
-    SourcePage,
+from apartment_hunter.sources import Filter, ScrapeError, SourcePage
+from apartment_hunter.sources.common import (
+    check_response,
+    doesnt_know,
+    layout_changed,
+    look_up,
+    same_name,
+    slug,
+    unreadable,
 )
-from apartment_hunter.sources.http import HttpClient, raise_for_status
+from apartment_hunter.sources.http import HttpClient
 
 _SITE = "https://www.kleinanzeigen.de"
 # Flats and houses to rent are separate categories: (path, category id, attribute prefix). Kleinanzeigen
@@ -36,26 +39,16 @@ _PRICE = re.compile(r"(?P<amount>\d[\d.]*) €(?: VB)?|VB")
 _ROOMS = re.compile(r"(\d+(?:,\d+)?) Zi\.")
 _COUNTS = re.compile(r"(?P<first>[\d.]+)\s*-\s*(?P<last>[\d.]+) von (?P<total>[\d.]+)")
 _BLOCK_MARKERS = ("captcha", "Access Denied", "Just a moment")
-_BLOCKED = (
-    "Kleinanzeigen is blocking requests from this computer right now (bot protection). "
-    "This usually clears up on its own."
-)
-_LAYOUT_CHANGED = (
-    "Kleinanzeigen's page layout changed, so listings couldn't be read. The bot needs an update."
-)
+NAME = "Kleinanzeigen"
+_LAYOUT_CHANGED = layout_changed(NAME)
 SUGGEST_URL = f"{_SITE}/s-ort-empfehlungen.json"
-LOOKUP_DOWN = "Kleinanzeigen's place lookup isn't answering right now. Try again in a few minutes."
 # The place lookup (Photon) spells some German cities in English; Kleinanzeigen knows only the German name.
 GERMAN_NAMES = {
     "Munich": "München", "Cologne": "Köln", "Nuremberg": "Nürnberg", "Hanover": "Hannover",
     "Brunswick": "Braunschweig", "Frankfurt": "Frankfurt am Main",
 }
-_UMLAUTS = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"})
-
-
-def slug(name: str) -> str:
-    """A place name as Kleinanzeigen writes it in its URLs: "Neukölln" is "neukoelln"."""
-    return re.sub(r"[^a-z0-9]+", "-", name.casefold().translate(_UMLAUTS)).strip("-")
+# How Kleinanzeigen spells umlauts in its URLs: "Neukölln" is "neukoelln".
+UMLAUTS = {"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"}
 
 
 def suggest_url(text: str) -> str:
@@ -82,12 +75,11 @@ def matching_location(found: list[tuple[int, str]], area: Area, query: str) -> S
     if area.kind == "zipcode":
         ids = [id_ for id_, name in found if name.startswith(f"{query} ")]
         return {"location_id": ids[0], "slug": query} if ids else None
-    named = [(id_, name) for id_, name in found if slug(name.split(" - ")[0]) == slug(query)]
-    parts = area.display.split(", ")
-    city = slug(GERMAN_NAMES.get(parts[1], parts[1])) if len(parts) > 2 else ""
-    in_city = [(id_, name) for id_, name in named if city and city in slug(name.split(" - ", 1)[-1])]
+    named = [(id_, name) for id_, name in found if same_name(name.split(" - ")[0], query)]
+    city = slug(GERMAN_NAMES.get(area.context[0], area.context[0]), UMLAUTS) if area.context else ""
+    in_city = [(id_, name) for id_, name in named if city and city in slug(name.split(" - ", 1)[-1], UMLAUTS)]
     best = in_city or named
-    return {"location_id": best[0][0], "slug": slug(query)} if best else None
+    return {"location_id": best[0][0], "slug": slug(query, UMLAUTS)} if best else None
 
 
 def search_url(criteria: Criteria, page: int = 1) -> str:
@@ -159,10 +151,8 @@ def parse_search_page(html: str, scraped_at: datetime) -> SourcePage:
     aren't in the Area, so the page is empty."""
     page = Selector(html)
     heading = page.css("#srp-breadcrumb-summary")
-    if not heading:  # look for a block page only here: an ad's own text could hold the words
-        if any(marker in html for marker in _BLOCK_MARKERS):
-            raise BlockedError(_BLOCKED)
-        raise ScrapeError(_LAYOUT_CHANGED)
+    if not heading:
+        raise unreadable(html, NAME, _BLOCK_MARKERS)
     counts = _COUNTS.search(str(heading[0].text))
     if counts is None:
         if "keine Ergebnisse" in str(heading[0].text):
@@ -203,16 +193,11 @@ class KleinanzeigenSource:
 
     def place(self, area: Area) -> SourceLocation:
         """The location named like the Area's own name (in German), or a postcode's own location."""
-        name = area.display.split(", ")[0]
-        query = name if area.kind == "zipcode" else GERMAN_NAMES.get(name, name)
-        try:
-            response = self._lookup_http.get(suggest_url(query))
-        except ScrapeError as error:
-            raise ScrapeError(LOOKUP_DOWN) from error
-        raise_for_status(response, blocked=LOOKUP_DOWN, failed=LOOKUP_DOWN)
-        location = matching_location(parse_suggestions(response.text), area, query)
+        query = area.name if area.kind == "zipcode" else GERMAN_NAMES.get(area.name, area.name)
+        answer = look_up(self._lookup_http, suggest_url(query), NAME)
+        location = matching_location(parse_suggestions(answer), area, query)
         if location is None:
-            raise CantPlace(f"Kleinanzeigen doesn't know {area.display}.")
+            raise doesnt_know(NAME, area)
         return location
 
     def results_url(self, criteria: Criteria) -> str:
@@ -220,6 +205,5 @@ class KleinanzeigenSource:
 
     def fetch(self, criteria: Criteria, page: int) -> SourcePage:
         response = self._http.get(search_url(criteria, page))
-        failed = f"Kleinanzeigen answered with an error (HTTP {response.status})."
-        raise_for_status(response, blocked=_BLOCKED, failed=failed)
+        check_response(response, NAME)
         return parse_search_page(response.text, self._now())

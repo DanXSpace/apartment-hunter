@@ -3,8 +3,6 @@ turns Criteria into a newest-first rental search, and reads Listings from its JS
 
 import json
 import math
-import re
-import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -13,16 +11,18 @@ from urllib.parse import quote
 
 from apartment_hunter.criteria import Area, Criteria, HomeType, SourceLocation
 from apartment_hunter.models import Listing
-from apartment_hunter.sources import (
-    NO_HOME_TYPE_NOTES,
-    PLACE_NOTE,
-    BlockedError,
-    CantPlace,
-    Filter,
-    ScrapeError,
-    SourcePage,
+from apartment_hunter.sources import NO_HOME_TYPE_NOTES, Filter, ScrapeError, SourcePage
+from apartment_hunter.sources.common import (
+    check_response,
+    doesnt_know,
+    layout_changed,
+    look_up,
+    same_name,
+    slug,
+    unreadable,
+    with_note,
 )
-from apartment_hunter.sources.http import HttpClient, raise_for_status
+from apartment_hunter.sources.http import HttpClient
 
 FEED_URL = "https://www.bienici.com/realEstateAds.json"
 SUGGEST_URL = "https://res.bienici.com/suggest.json"
@@ -30,7 +30,7 @@ SEARCH_PAGE_URL = "https://www.bienici.com/recherche/location"
 PAGE_SIZE = 24
 # Lookup places too big to stand in for a neighbourhood the lookup doesn't know.
 BROAD_KINDS = {"department", "region", "country"}
-LOOKUP_DOWN = "Bien'ici's place lookup isn't answering right now. Try again in a few minutes."
+NAME = "Bien'ici"
 # Homes to live in (Bien'ici's feed also holds parking spaces, shops, offices and land).
 HOMES = ["flat", "house", "loft", "townhouse"]
 PROPERTY_TYPES = {
@@ -43,17 +43,7 @@ HOME_NAMES = {"flat": ("flat", "appartement"), "house": ("house", "maison"), "lo
               "townhouse": ("townhouse", "maison")}
 _SITE = "https://www.bienici.com"
 _BLOCK_MARKERS = ("captcha-delivery", "Access Denied", "Just a moment")
-_BLOCKED = (
-    "Bien'ici is blocking requests from this computer right now (bot protection). "
-    "This usually clears up on its own."
-)
-_LAYOUT_CHANGED = "Bien'ici's results feed changed, so listings couldn't be read. The bot needs an update."
-
-
-def slug(text: str) -> str:
-    """A name as Bien'ici writes it in addresses: "Saint-Étienne" is "saint-etienne"."""
-    plain = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
-    return re.sub(r"[^a-z0-9]+", "-", plain.casefold()).strip("-")
+_FEED_CHANGED = layout_changed(NAME, "results feed")
 
 
 def feed_filters(criteria: Criteria, page: int = 1) -> dict[str, Any]:
@@ -113,17 +103,15 @@ def parse_feed(body: str, scraped_at: datetime) -> SourcePage:
     order, so all of them are kept."""
     try:
         data = json.loads(body)
-    except ValueError as error:  # not the feed: look for a block page only then
-        if any(marker in body for marker in _BLOCK_MARKERS):
-            raise BlockedError(_BLOCKED) from error
-        raise ScrapeError(_LAYOUT_CHANGED) from error
+    except ValueError as error:  # not the feed
+        raise unreadable(body, NAME, _BLOCK_MARKERS, _FEED_CHANGED) from error
     try:
         ads = data["realEstateAds"]
         listings = [_listing(ad, scraped_at) for ad in ads]
         total = int(data["total"])
         has_more = int(data.get("from") or 0) + len(ads) < total
     except (ValueError, KeyError, TypeError, AttributeError) as error:
-        raise ScrapeError(_LAYOUT_CHANGED) from error
+        raise ScrapeError(_FEED_CHANGED) from error
     return SourcePage(listings, total, has_more)
 
 
@@ -185,7 +173,7 @@ def matching_zone(found: list[Zone], area: Area, query: str) -> Zone | None:
     department). None when nothing matches."""
     if area.kind == "zipcode":
         return next((zone for zone in found if query in zone.postal_codes), None)
-    named = [zone for zone in found if slug(zone.name) == slug(query) and zone.holds(area.lat, area.lon)]
+    named = [zone for zone in found if same_name(zone.name, query) and zone.holds(area.lat, area.lon)]
     return min(named, key=lambda zone: zone.size) if named else None
 
 
@@ -220,29 +208,21 @@ class BieniciSource:
         communes and arrondissements but not neighbourhoods, so when that fails the Area goes on the
         smallest zone of its city that holds it: Montmartre is searched as Paris 18e, and the location
         notes that."""
-        parts = area.display.split(", ")
-        zone = matching_zone(self._suggest(parts[0]), area, parts[0])
+        zone = matching_zone(self._suggest(area.name), area, area.name)
         if zone is not None:
             return zone.location
-        zone = smallest_zone_around(self._suggest(parts[1]), area) if len(parts) > 2 else None
+        zone = smallest_zone_around(self._suggest(area.context[0]), area) if area.context else None
         if zone is None:
-            raise CantPlace(f"Bien'ici doesn't know {area.display}.")
-        return {**zone.location, PLACE_NOTE: f"Bien'ici doesn't know {parts[0]}, so it searches {zone.name}."}
+            raise doesnt_know(NAME, area)
+        return with_note(zone.location, f"{NAME} doesn't know {area.name}, so it searches {zone.name}.")
 
     def _suggest(self, text: str) -> list[Zone]:
-        try:
-            response = self._lookup_http.get(suggest_url(text))
-        except ScrapeError as error:
-            raise ScrapeError(LOOKUP_DOWN) from error
-        raise_for_status(response, blocked=LOOKUP_DOWN, failed=LOOKUP_DOWN)
-        return parse_suggestions(response.text)
+        return parse_suggestions(look_up(self._lookup_http, suggest_url(text), NAME))
 
     def results_url(self, criteria: Criteria) -> str:
         return f"{SEARCH_PAGE_URL}/{criteria.area.locations[self.key]['slug']}"
 
     def fetch(self, criteria: Criteria, page: int) -> SourcePage:
         response = self._http.get(feed_url(criteria, page))
-        raise_for_status(
-            response, blocked=_BLOCKED, failed=f"Bien'ici answered with an error (HTTP {response.status})."
-        )
+        check_response(response, NAME)
         return parse_feed(response.text, self._now())

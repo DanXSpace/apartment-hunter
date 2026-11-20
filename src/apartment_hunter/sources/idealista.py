@@ -16,25 +16,15 @@ from scrapling.parser import Selector
 
 from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, SourceLocation
 from apartment_hunter.models import Listing
-from apartment_hunter.sources import (
-    ALL_FILTERS,
-    NO_HOME_TYPE_NOTES,
-    BlockedError,
-    Filter,
-    ScrapeError,
-    SourcePage,
-)
-from apartment_hunter.sources.http import HttpClient, raise_for_status
+from apartment_hunter.sources import ALL_FILTERS, NO_HOME_TYPE_NOTES, Filter, ScrapeError, SourcePage
+from apartment_hunter.sources.common import check_response, layout_changed, unreadable
+from apartment_hunter.sources.http import HttpClient
 
 # Half the side of the square drawn around an Area that has no bounding box, in kilometres.
 HALF_SIDE_KM = {"city": 5.0, "neighborhood": 1.0, "zipcode": 1.0}
 _KM_PER_DEGREE = 111.32
 _BLOCK_MARKERS = ("captcha-delivery", "datadome")
-_BLOCKED = (
-    "Idealista is blocking requests from this computer right now (bot protection). "
-    "This usually clears up on its own."
-)
-_LAYOUT_CHANGED = "Idealista's page layout changed, so listings couldn't be read. The bot needs an update."
+NAME = "Idealista"  # in messages, for Italy and Portugal alike
 
 
 @dataclass(frozen=True)
@@ -206,14 +196,12 @@ def parse_search_page(config: IdealistaConfig, html: str, scraped_at: datetime) 
     a no-matches heading has none."""
     page = Selector(html)
     heading = page.css("#h1-container__text")
-    if not heading:  # look for a block page only here: a listing's own text could hold the words
-        if any(marker in html for marker in _BLOCK_MARKERS):
-            raise BlockedError(_BLOCKED)
-        raise ScrapeError(_LAYOUT_CHANGED)
+    if not heading:
+        raise unreadable(html, NAME, _BLOCK_MARKERS)
     try:
         listings = [_listing(config, card, scraped_at) for card in page.css("article.item[data-element-id]")]
     except (ValueError, KeyError, TypeError, AttributeError, IndexError) as error:
-        raise ScrapeError(_LAYOUT_CHANGED) from error
+        raise ScrapeError(layout_changed(NAME)) from error
     count = re.match(r"\s*([\d.]+)", str(heading[0].text))
     total = int(count[1].replace(".", "")) if count else 0
     return SourcePage(listings, total, bool(page.css(".pagination li.next a")))
@@ -246,6 +234,5 @@ class IdealistaSource:
         response = self._http.get(search_url(self._config, criteria, page))
         # Idealista answers a search with no matches with HTTP 404 and its usual results page.
         if not (response.status == 404 and "h1-container__text" in response.text):
-            failed = f"Idealista answered with an error (HTTP {response.status})."
-            raise_for_status(response, blocked=_BLOCKED, failed=failed)
+            check_response(response, NAME)
         return parse_search_page(self._config, response.text, self._now())

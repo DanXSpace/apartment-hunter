@@ -14,6 +14,7 @@ from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, SourceLoca
 from apartment_hunter.geo import distance_miles
 from apartment_hunter.models import Listing
 from apartment_hunter.sources import ALL_FILTERS, NO_HOME_TYPE_NOTES, ScrapeError, SourcePage
+from apartment_hunter.sources.common import http_error, layout_changed
 from apartment_hunter.sources.http import HttpClient, raise_for_status
 from apartment_hunter.text import plain_number
 
@@ -26,11 +27,10 @@ HOUSING_TYPES = {
     HomeType.HOUSE: (3, 4, 6),
     HomeType.TOWNHOME: (9,),
 }
+NAME = "Craigslist"
+# Worded as in the US release, without "(bot protection)".
 _BLOCKED = (
     "Craigslist is blocking requests from this computer right now. This usually clears up on its own."
-)
-_LAYOUT_CHANGED = (
-    "Craigslist's page layout changed, so listings couldn't be read. The bot needs an update."
 )
 
 
@@ -83,7 +83,7 @@ def _text(node: Selector, css: str) -> str:
 def parse_search_page(html: str, scraped_at: datetime) -> list[Listing]:
     lists = Selector(html).css("ol.cl-static-search-results")
     if not lists:
-        raise ScrapeError(_LAYOUT_CHANGED)
+        raise ScrapeError(layout_changed(NAME))
     listings = []
     for item in lists[0].css("li.cl-static-search-result"):
         links = item.css("a")
@@ -129,7 +129,5 @@ class CraigslistSource:
         if page > 1:
             return SourcePage([], None, False)
         response = self._http.get(search_url(criteria))
-        raise_for_status(
-            response, blocked=_BLOCKED, failed=f"Craigslist answered with an error (HTTP {response.status})."
-        )
+        raise_for_status(response, blocked=_BLOCKED, failed=http_error(NAME, response.status))
         return SourcePage(parse_search_page(response.text, self._now()), None, False)

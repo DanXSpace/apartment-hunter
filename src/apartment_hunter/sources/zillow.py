@@ -13,20 +13,14 @@ from scrapling.parser import Selector
 from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, SourceLocation
 from apartment_hunter.geo import distance_miles
 from apartment_hunter.models import Listing
-from apartment_hunter.sources import (
-    ALL_FILTERS,
-    NO_HOME_TYPE_NOTES,
-    BlockedError,
-    CantPlace,
-    ScrapeError,
-    SourcePage,
-)
-from apartment_hunter.sources.http import HttpClient, raise_for_status
+from apartment_hunter.sources import ALL_FILTERS, NO_HOME_TYPE_NOTES, BlockedError, ScrapeError, SourcePage
+from apartment_hunter.sources.common import blocked, check_response, doesnt_know, layout_changed, look_up
+from apartment_hunter.sources.http import HttpClient
 
 SEARCH_URL = "https://www.zillow.com/homes/for_rent/"
 # Zillow's region types for the place kinds a Search accepts.
 ACCEPTED_KINDS = {"city": 6, "zipcode": 7, "neighborhood": 8}
-LOOKUP_DOWN = "Zillow's place lookup isn't answering right now. Try again in a few minutes."
+NAME = "Zillow"
 MAX_PLACE_MILES = 20  # a Zillow region farther than this from the Area is some other place
 _SITE = "https://www.zillow.com"
 
@@ -61,12 +55,8 @@ _PET_FILTERS = {
     Pets.SMALL_DOGS: "onlyRentalSmallDogsAllowed",
     Pets.LARGE_DOGS: "onlyRentalLargeDogsAllowed",
 }
-_BLOCK_MARKERS =("px-captcha", "Press & Hold")
-_BLOCKED = (
-    "Zillow is blocking requests from this computer right now (bot protection). "
-    "This usually clears up on its own."
-)
-_LAYOUT_CHANGED = "Zillow's page layout changed, so listings couldn't be read. The bot needs an update."
+_BLOCK_MARKERS = ("px-captcha", "Press & Hold")
+_LAYOUT_CHANGED = layout_changed(NAME)
 
 
 @dataclass(frozen=True)
@@ -154,15 +144,8 @@ def nearby_place(found: Suggestions, area: Area, query: str) -> Place | None:
 
 
 def look_up_places(http: HttpClient, text: str) -> Suggestions:
-    """One request to Zillow's place lookup; ScrapeError (or BlockedError) when it doesn't answer."""
-    try:
-        response = http.get(suggestions_url(text))
-    except ScrapeError:
-        raise
-    except Exception as error:
-        raise ScrapeError(LOOKUP_DOWN) from error
-    raise_for_status(response, blocked=LOOKUP_DOWN, failed=LOOKUP_DOWN)
-    return read_suggestions(response.text)
+    """One request to Zillow's place lookup; ScrapeError when it doesn't answer."""
+    return read_suggestions(look_up(http, suggestions_url(text), NAME))
 
 
 def search_url(criteria: Criteria, page: int = 1) -> str:
@@ -243,7 +226,7 @@ def _card(raw: dict[str, Any], scraped_at: datetime) -> ZillowCard:
 
 def parse_search_page(html: str, scraped_at: datetime) -> tuple[list[ZillowCard], int | None, bool]:
     if any(marker in html for marker in _BLOCK_MARKERS):
-        raise BlockedError(_BLOCKED)
+        raise BlockedError(blocked(NAME))
     scripts = Selector(html).css("script#__NEXT_DATA__")
     if not scripts:
         raise ScrapeError(_LAYOUT_CHANGED)
@@ -282,7 +265,7 @@ class ZillowSource:
         query = place_query(area)
         found = nearby_place(look_up_places(self._lookup_http, query), area, query)
         if found is None:
-            raise CantPlace(f"Zillow doesn't know {area.display}.")
+            raise doesnt_know(NAME, area)
         return {"region_id": found.region_id, "region_type": ACCEPTED_KINDS[found.kind]}
 
     def results_url(self, criteria: Criteria) -> str:
@@ -290,9 +273,7 @@ class ZillowSource:
 
     def fetch(self, criteria: Criteria, page: int) -> SourcePage:
         response = self._http.get(search_url(criteria, page))
-        raise_for_status(
-            response, blocked=_BLOCKED, failed=f"Zillow answered with an error (HTTP {response.status})."
-        )
+        check_response(response, NAME)
         cards, total, has_more = parse_search_page(response.text, self._now())
         listings = [c.listing for c in cards if matches_home_type(c.home_type, criteria.home_type)]
         return SourcePage(listings, total, has_more)
