@@ -14,16 +14,19 @@ from scrapling.parser import Selector
 
 from apartment_hunter.criteria import Area, Criteria, HomeType, SourceLocation
 from apartment_hunter.models import Listing
-from apartment_hunter.sources import (
-    NO_HOME_TYPE_NOTES,
-    PLACE_NOTE,
-    BlockedError,
-    CantPlace,
-    Filter,
-    ScrapeError,
-    SourcePage,
+from apartment_hunter.sources import NO_HOME_TYPE_NOTES, Filter, ScrapeError, SourcePage
+from apartment_hunter.sources.common import (
+    check_response,
+    find_by_name,
+    in_context,
+    layout_changed,
+    look_up,
+    per_month,
+    same_name,
+    unreadable,
+    with_note,
 )
-from apartment_hunter.sources.http import HttpClient, raise_for_status
+from apartment_hunter.sources.http import HttpClient
 from apartment_hunter.text import plain_number
 
 SEARCH_URL = "https://www.rightmove.co.uk/property-to-rent/find.html"
@@ -38,16 +41,11 @@ PROPERTY_TYPES = {
     HomeType.HOUSE: "detached,semi-detached,terraced,bungalow",
     HomeType.TOWNHOME: "terraced",
 }
-# Rent periods Rightmove shows, as months per period (weekly: 52 weeks over 12 months).
-MONTHS_PER = {"monthly": 1, "weekly": 12 / 52, "daily": 12 / 365, "quarterly": 3, "yearly": 12}
-LOOKUP_DOWN = "Rightmove's place lookup isn't answering right now. Try again in a few minutes."
+# Rent periods as Rightmove names them.
+PERIODS = {"daily": "day", "weekly": "week", "monthly": "month", "quarterly": "quarter", "yearly": "year"}
+NAME = "Rightmove"
 _SITE = "https://www.rightmove.co.uk"
 _BLOCK_MARKERS = ("Access Denied", "captcha")
-_BLOCKED = (
-    "Rightmove is blocking requests from this computer right now (bot protection). "
-    "This usually clears up on its own."
-)
-_LAYOUT_CHANGED = "Rightmove's page layout changed, so listings couldn't be read. The bot needs an update."
 
 
 @dataclass(frozen=True)
@@ -85,10 +83,8 @@ def parse_typeahead(body: str) -> list[RightmoveLocation]:
 def best_location(found: list[RightmoveLocation], area: Area, query: str) -> RightmoveLocation | None:
     """The location named exactly `query`, preferring one whose display mentions the rest of the
     Area ("London" for "Camden Town, London, United Kingdom"); None when nothing is named so."""
-    named = [loc for loc in found if loc.display.split(",")[0].strip().casefold() == query.casefold()]
-    context = [part.casefold() for part in area.display.split(", ")[1:-1]]
-    in_context = [loc for loc in named if any(part in loc.display.casefold() for part in context)]
-    best = in_context or named
+    named = [loc for loc in found if same_name(loc.display.split(",")[0], query)]
+    best = [loc for loc in named if in_context(loc.display, area)] or named
     return best[0] if best else None
 
 
@@ -117,10 +113,10 @@ def search_url(criteria: Criteria, page: int = 1) -> str:
 
 def monthly_rent(price: dict[str, Any]) -> int | None:
     """A rent per calendar month, whatever period the listing shows: £500 pw is £2,167 pcm."""
-    amount, months = price.get("amount"), MONTHS_PER.get(price.get("frequency") or "")
-    if not isinstance(amount, int | float) or months is None:
+    amount, period = price.get("amount"), PERIODS.get(price.get("frequency") or "")
+    if not isinstance(amount, int | float) or period is None:
         return None
-    return round(amount / months)
+    return per_month(amount, period)
 
 
 def _number(value: object) -> float | None:
@@ -144,10 +140,8 @@ def parse_search_page(html: str, scraped_at: datetime) -> SourcePage:
     """The results page's Listings, newest first. Featured cards are adverts pinned above the results
     in any order, so they're left out; each one also shows up in its place in the newest-first list."""
     scripts = Selector(html).css("script#__NEXT_DATA__")
-    if not scripts:  # look for a block page only here: a listing's own text could hold the words
-        if any(marker in html for marker in _BLOCK_MARKERS):
-            raise BlockedError(_BLOCKED)
-        raise ScrapeError(_LAYOUT_CHANGED)
+    if not scripts:
+        raise unreadable(html, NAME, _BLOCK_MARKERS)
     try:
         results = json.loads(str(scripts[0].text))["props"]["pageProps"]["searchResults"]
         listings = [_listing(raw, scraped_at) for raw in results["properties"]
@@ -155,7 +149,7 @@ def parse_search_page(html: str, scraped_at: datetime) -> SourcePage:
         count = str(results.get("resultCount") or "").replace(",", "")
         has_more = bool((results.get("pagination") or {}).get("next"))
     except (ValueError, KeyError, TypeError, AttributeError) as error:
-        raise ScrapeError(_LAYOUT_CHANGED) from error
+        raise ScrapeError(layout_changed(NAME)) from error
     return SourcePage(listings, int(count) if count.isdigit() else None, has_more)
 
 
@@ -182,31 +176,17 @@ class RightmoveSource:
         """The location named like the Area's own name. A full postcode is searched as Rightmove's
         postcode location when the typeahead offers it, else as its outward code ("SW11" for
         "SW11 6HR"), with a note saying so."""
-        name = area.display.split(", ")[0]
-        found = self._look_up(area, name)
-        if found is not None:
-            return {"location_id": found.identifier, "radius_miles": LOCATION_RADIUS[found.kind]}
-        outward = name.split(" ")[0]
-        found = self._look_up(area, outward) if area.kind == "zipcode" and outward != name else None
-        if found is None:
-            raise CantPlace(f"Rightmove doesn't know {area.display}.")
-        return {"location_id": found.identifier, "radius_miles": LOCATION_RADIUS[found.kind],
-                PLACE_NOTE: f"Rightmove doesn't know {name}, so it searches all of {outward}."}
+        found, note = find_by_name(area, NAME, lambda query: self._look_up(area, query))
+        return with_note({"location_id": found.identifier, "radius_miles": LOCATION_RADIUS[found.kind]}, note)
 
     def _look_up(self, area: Area, query: str) -> RightmoveLocation | None:
-        try:
-            response = self._lookup_http.get(typeahead_url(query))
-        except ScrapeError as error:
-            raise ScrapeError(LOOKUP_DOWN) from error
-        raise_for_status(response, blocked=LOOKUP_DOWN, failed=LOOKUP_DOWN)
-        return best_location(parse_typeahead(response.text), area, query)
+        answer = look_up(self._lookup_http, typeahead_url(query), NAME)
+        return best_location(parse_typeahead(answer), area, query)
 
     def results_url(self, criteria: Criteria) -> str:
         return search_url(criteria, 1)
 
     def fetch(self, criteria: Criteria, page: int) -> SourcePage:
         response = self._http.get(search_url(criteria, page))
-        raise_for_status(
-            response, blocked=_BLOCKED, failed=f"Rightmove answered with an error (HTTP {response.status})."
-        )
+        check_response(response, NAME)
         return parse_search_page(response.text, self._now())

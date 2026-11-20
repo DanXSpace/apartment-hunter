@@ -45,6 +45,17 @@ class Area:
     bbox: tuple[float, float, float, float] | None = None
     locations: dict[str, SourceLocation] = field(default_factory=dict)
 
+    @property
+    def name(self) -> str:
+        """The place's own name, the first part of `display`: "Camden Town", "SW11 6HR"."""
+        return self.display.split(", ")[0]
+
+    @property
+    def context(self) -> tuple[str, ...]:
+        """The parts of `display` between the name and the country: ("London",) for "Camden Town,
+        London, United Kingdom", ("Chicago", "IL") for "Lincoln Park, Chicago, IL, United States"."""
+        return tuple(self.display.split(", ")[1:-1])
+
 
 @dataclass(frozen=True)
 class Criteria:

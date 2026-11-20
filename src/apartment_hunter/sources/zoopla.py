@@ -12,20 +12,23 @@ from urllib.parse import quote, urlencode
 
 from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, SourceLocation
 from apartment_hunter.models import Listing
-from apartment_hunter.sources import (
-    ALL_FILTERS,
-    PLACE_NOTE,
-    BlockedError,
-    CantPlace,
-    ScrapeError,
-    SourcePage,
+from apartment_hunter.sources import ALL_FILTERS, ScrapeError, SourcePage
+from apartment_hunter.sources.common import (
+    check_response,
+    find_by_name,
+    layout_changed,
+    look_up,
+    per_month,
+    same_name,
+    unreadable,
+    with_note,
 )
-from apartment_hunter.sources.http import HttpClient, raise_for_status
+from apartment_hunter.sources.http import HttpClient
 from apartment_hunter.text import plain_number
 
 _SITE = "https://www.zoopla.co.uk"
 SEARCH_BOX_URL = f"{_SITE}/search/"
-LOOKUP_DOWN = "Zoopla's place lookup isn't answering right now. Try again in a few minutes."
+NAME = "Zoopla"
 NEWEST_FIRST = "newest_listings"  # Zoopla's results_sort for "Most recent"
 # The search path's property type: /to-rent/flats/<place>/. Zoopla has no terraced-only search, so a
 # townhome looks at every house.
@@ -35,15 +38,10 @@ PROPERTY_PATHS = {
     HomeType.HOUSE: "houses",
     HomeType.TOWNHOME: "houses",
 }
-# Rent periods in Zoopla's price labels, as months per period (weekly: 52 weeks over 12 months).
-MONTHS_PER = {"pcm": 1, "pw": 12 / 52, "pq": 3, "pa": 12}
+# Rent periods in Zoopla's price labels.
+PERIODS = {"pcm": "month", "pw": "week", "pq": "quarter", "pa": "year"}
 _PRICE = re.compile(r"£(?P<amount>[\d,]+(?:\.\d+)?)\s*(?P<period>[a-z]+)")
 _BLOCK_MARKERS = ("Just a moment", "Access Denied", "captcha")
-_BLOCKED = (
-    "Zoopla is blocking requests from this computer right now (bot protection). "
-    "This usually clears up on its own."
-)
-_LAYOUT_CHANGED = "Zoopla's page layout changed, so listings couldn't be read. The bot needs an update."
 # Next.js streams the page's data in chunks: <script>self.__next_f.push([1,"<JSON string>"])</script>.
 _DATA_CHUNK = re.compile(r'self\.__next_f\.push\(\[1,(".*?")\]\)</script>', re.S)
 
@@ -52,11 +50,6 @@ def place_search_url(query: str) -> str:
     """Zoopla's search box: it redirects to the results page of the place it understood the text as,
     or to a "we could not find a place name" page."""
     return f"{SEARCH_BOX_URL}?{urlencode([('q', query.casefold()), ('section', 'to-rent')])}"
-
-
-def _plain(name: str) -> str:
-    """A place name to compare: "St. John's Wood" and "St Johns Wood" are the same place."""
-    return re.sub(r"[^0-9a-z]", "", name.casefold())
 
 
 def found_place(html: str, query: str) -> str | None:
@@ -70,7 +63,7 @@ def found_place(html: str, query: str) -> str | None:
     except (ValueError, KeyError, TypeError):
         return None
     names = (label.split(",")[0], identifier.rsplit("/", 1)[-1])
-    return identifier if identifier and _plain(query) in {_plain(name) for name in names} else None
+    return identifier if identifier and any(same_name(query, name) for name in names) else None
 
 
 def search_url(criteria: Criteria, page: int = 1) -> str:
@@ -110,9 +103,9 @@ def monthly_rent(label: str) -> int | None:
     """A rent per calendar month from the price Zoopla shows: "£1,148 pcm" is 1148, "£500 pw" is 2167
     (52 weeks over 12 months); None for "POA" or a period it doesn't know."""
     found = _PRICE.search(label)
-    if found is None or found["period"] not in MONTHS_PER:
+    if found is None or found["period"] not in PERIODS:
         return None
-    return round(float(found["amount"].replace(",", "")) / MONTHS_PER[found["period"]])
+    return per_month(float(found["amount"].replace(",", "")), PERIODS[found["period"]])
 
 
 def _feature(raw: dict[str, Any], icon: str) -> float | None:
@@ -148,19 +141,24 @@ def parse_search_page(html: str, scraped_at: datetime) -> SourcePage:
     try:
         data = page_data(html)
     except ValueError as error:
-        raise ScrapeError(_LAYOUT_CHANGED) from error
-    if '"regularListingsFormatted"' not in data:  # look for a block page only here
-        if any(marker in html for marker in _BLOCK_MARKERS):
-            raise BlockedError(_BLOCKED)
-        raise ScrapeError(_LAYOUT_CHANGED)
+        raise ScrapeError(layout_changed(NAME)) from error
+    if '"regularListingsFormatted"' not in data:
+        raise unreadable(html, NAME, _BLOCK_MARKERS)
     try:
         listings = [_listing(raw, scraped_at) for raw in embedded_value(data, "regularListingsFormatted")]
         pagination = embedded_value(data, "pagination")
         total = int(pagination["totalResults"])
         has_more = int(pagination["pageNumber"]) < int(pagination["pageNumberMax"])
     except (ValueError, KeyError, TypeError, AttributeError) as error:
-        raise ScrapeError(_LAYOUT_CHANGED) from error
+        raise ScrapeError(layout_changed(NAME)) from error
     return SourcePage(listings, total, has_more)
+
+
+def _server_error(status: int) -> str | None:
+    if status < 500:
+        return None
+    return (f"Zoopla's place search answered with an error (HTTP {status}). "
+            "Try adding it again later with /search edit.")
 
 
 class ZooplaSource:
@@ -186,35 +184,19 @@ class ZooplaSource:
     def place(self, area: Area) -> SourceLocation:
         """The place named like the Area's own name. A full postcode is searched as itself when
         Zoopla knows it, else as its outward code ("SW11" for "SW11 6HR"), with a note saying so."""
-        name = area.display.split(", ")[0]
-        geo = self._look_up(name)
-        if geo is not None:
-            return {"geo": geo}
-        outward = name.split(" ")[0]
-        geo = self._look_up(outward) if area.kind == "zipcode" and outward != name else None
-        if geo is None:
-            raise CantPlace(f"Zoopla doesn't know {area.display}.")
-        return {"geo": geo, PLACE_NOTE: f"Zoopla doesn't know {name}, so it searches all of {outward}."}
+        geo, note = find_by_name(area, NAME, self._look_up)
+        return with_note({"geo": geo}, note)
 
     def _look_up(self, query: str) -> str | None:
         """The place Zoopla's search box lands on for `query`. The search box sometimes answers with a
         server error for a while; that leaves Zoopla out of this Search rather than refusing it."""
-        try:
-            response = self._lookup_http.get(place_search_url(query))
-        except ScrapeError as error:
-            raise ScrapeError(LOOKUP_DOWN) from error
-        if response.status >= 500:
-            raise CantPlace(f"Zoopla's place search answered with an error (HTTP {response.status}). "
-                            "Try adding it again later with /search edit.")
-        raise_for_status(response, blocked=LOOKUP_DOWN, failed=LOOKUP_DOWN)
-        return found_place(response.text, query)
+        answer = look_up(self._lookup_http, place_search_url(query), NAME, left_out=_server_error)
+        return found_place(answer, query)
 
     def results_url(self, criteria: Criteria) -> str:
         return search_url(criteria, 1)
 
     def fetch(self, criteria: Criteria, page: int) -> SourcePage:
         response = self._http.get(search_url(criteria, page))
-        raise_for_status(
-            response, blocked=_BLOCKED, failed=f"Zoopla answered with an error (HTTP {response.status})."
-        )
+        check_response(response, NAME)
         return parse_search_page(response.text, self._now())

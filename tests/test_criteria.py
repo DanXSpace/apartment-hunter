@@ -1,4 +1,5 @@
 from apartment_hunter.criteria import (
+    Area,
     Criteria,
     HomeType,
     Pets,
@@ -7,6 +8,13 @@ from apartment_hunter.criteria import (
     summarize,
 )
 from conftest import CHICAGO, LINCOLN_PARK
+
+
+def test_an_areas_name_and_context_are_the_parts_of_its_display():
+    camden = Area("Camden Town, London, United Kingdom", "neighborhood", "GB", 51.539, -0.1426)
+    assert (camden.name, camden.context) == ("Camden Town", ("London",))
+    paris = Area("Paris, France", "city", "FR", 48.86, 2.35)
+    assert (paris.name, paris.context) == ("Paris", ())
 
 
 def test_summary_lists_criteria_in_a_fixed_order():
