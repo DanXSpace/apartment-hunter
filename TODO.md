@@ -9,7 +9,7 @@ seeding runs, price-drop and per-Source health alerts, owner alerts, a Docker im
 ## Europe (spec #34)
 
 The UK, Germany, France, Spain, Italy, Portugal and the Netherlands, with Photon as the place lookup,
-per-country Sources and currencies. Open: Kleinanzeigen's 4-hour feasibility run (see the README's Hosting section).
+per-country Sources and currencies.
 
 ## Ideas (not scheduled)
 

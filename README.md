@@ -124,7 +124,7 @@ Every site was chosen by a feasibility run from the owner's home internet connec
 | Fotocasa | Passed (2026-11-19) |
 | Idealista (idealista.it, idealista.pt) | Passed (2026-11-19) |
 | Bien'ici | Passed (2026-11-20) |
-| Kleinanzeigen | Passed a quick check; 4-hour run pending <!-- DE-FEASIBILITY --> |
+| Kleinanzeigen | Passed (2026-11-20), all 16 rounds answered |
 
 Not used, because they blocked plain requests in the probes or the 4-hour run: Leboncoin, SeLoger, ImmoScout24, Funda, Idealista Spain and Immowelt (its newest-first filtered search sits behind bot protection, so Germany uses Kleinanzeigen).
 
