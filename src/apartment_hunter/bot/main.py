@@ -22,6 +22,7 @@ from apartment_hunter.sources.craigslist import CraigslistSource
 from apartment_hunter.sources.http import CurlHttpClient, PoliteHttpClient
 from apartment_hunter.sources.rightmove import RightmoveSource
 from apartment_hunter.sources.zillow import ZillowSource
+from apartment_hunter.sources.zoopla import ZooplaSource
 from apartment_hunter.storage import Store
 
 log = logging.getLogger("apartment_hunter")
@@ -71,6 +72,7 @@ def _run(settings: BotSettings, data: DataDir) -> int:
         "zillow": ZillowSource(run_http, lookup_http=place_http),
         "craigslist": CraigslistSource(run_http),
         "rightmove": RightmoveSource(run_http, lookup_http=place_http),
+        "zoopla": ZooplaSource(run_http, lookup_http=place_http),
     }
 
     # The lambdas look `bridge` and `service` up when called, after all of them exist.
