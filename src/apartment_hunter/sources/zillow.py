@@ -142,13 +142,14 @@ def place_query(area: Area) -> str:
 
 
 def nearby_place(found: Suggestions, area: Area, query: str) -> Place | None:
-    """The place called exactly `query`, or else the nearest place of the Area's kind (then of any
-    kind) within MAX_PLACE_MILES of the Area; None when Zillow offered nothing near it."""
+    """The place called exactly `query`, or else the nearest place of the Area's kind within
+    MAX_PLACE_MILES of the Area; None when Zillow offered nothing like it near it. A place of another
+    kind (the city around a neighbourhood) would search a different area, so it never stands in."""
     near = [p for p in found.places if distance_miles(area.lat, area.lon, p.lat, p.lon) <= MAX_PLACE_MILES]
     exact = [p for p in near if p.display.casefold() == query.casefold()]
     if exact:
         return exact[0]
-    same_kind = [p for p in near if p.kind == area.kind] or near
+    same_kind = [p for p in near if p.kind == area.kind]
     return min(same_kind, key=lambda p: distance_miles(area.lat, area.lon, p.lat, p.lon), default=None)
 
 

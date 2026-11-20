@@ -226,6 +226,17 @@ def test_place_looks_up_a_zip_code_by_itself():
     assert lookups.requested[0].endswith("?q=60614")
 
 
+def test_place_never_widens_an_area_to_a_nearby_region_of_another_kind():
+    # Zillow has no region for this neighbourhood, only the city around it: searching all of Chicago
+    # would be a silent widening, so Zillow is left out instead.
+    body = json.dumps({"results": [region("Chicago, IL", "city", 17426, 41.8781, -87.6298)]})
+    source = ZillowSource(FakeHttp(body), now=lambda: AT)
+    area = Area("Old Town, Chicago, IL, United States", "neighborhood", "US", 41.9112, -87.6378)
+    with pytest.raises(CantPlace) as refused:
+        source.place(area)
+    assert str(refused.value) == "Zillow doesn't know Old Town, Chicago, IL, United States."
+
+
 def test_place_refuses_a_zillow_region_far_from_the_area():
     source = ZillowSource(FakeHttp(LINCOLN_PARKS), now=lambda: AT)
     area = Area("Lincoln Park, NY, United States", "city", "US", 41.95, -74.0)
