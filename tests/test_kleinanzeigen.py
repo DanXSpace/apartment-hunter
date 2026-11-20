@@ -111,6 +111,13 @@ def test_kleinanzeigen_cannot_filter_by_baths():
     assert KleinanzeigenSource(FakeHttp()).filters == ALL_FILTERS - {Filter.BATHS}
 
 
+def test_kleinanzeigen_says_which_homes_it_searches_when_the_home_type_does_not_match_exactly():
+    assert KleinanzeigenSource(FakeHttp()).home_type_notes == {
+        HomeType.ANY: "Kleinanzeigen searches flats unless you pick House.",
+        HomeType.TOWNHOME: "Kleinanzeigen can't tell townhomes from houses, so you'll see all houses.",
+    }
+
+
 # Errors
 
 

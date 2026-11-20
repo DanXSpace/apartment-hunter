@@ -711,7 +711,8 @@ def test_a_search_in_germany_reads_kleinanzeigen_with_beds_as_rooms_and_prices_i
     assert search.sources == ("kleinanzeigen",)
     assert search.name == "Berlin, Berlin, Germany · 2+ bd · 1+ ba · up to €1,500"
     assert search.criteria.area.locations == {"kleinanzeigen": {"location_id": 3331, "slug": "berlin"}}
-    assert pending.notes == ("Kleinanzeigen can't filter by baths, so you'll see all of its matches.",)
+    assert pending.notes == ("Kleinanzeigen searches flats unless you pick House.",
+                             "Kleinanzeigen can't filter by baths, so you'll see all of its matches.")
     outcome = pending.wait(0)
     assert [(r.source, r.total, r.seeded) for r in outcome.results] == [("kleinanzeigen", 1732, True)]
     assert run_http.requested[0] == (

@@ -4,8 +4,9 @@ Criteria into a newest-first rental search, and reads Listings from the data the
 import json
 import math
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
+from types import MappingProxyType
 from typing import Any
 from urllib.parse import quote, urlencode
 
@@ -13,7 +14,6 @@ from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, SourceLoca
 from apartment_hunter.models import Listing
 from apartment_hunter.sources import (
     ALL_FILTERS,
-    NO_HOME_TYPE_NOTES,
     PLACE_NOTE,
     BlockedError,
     CantPlace,
@@ -165,11 +165,13 @@ def parse_search_page(html: str, scraped_at: datetime) -> SourcePage:
 
 class ZooplaSource:
     """Reads Zoopla. Places an Area through Zoopla's own search box, using `lookup_http` (default: the
-    Runs' client) so placing needn't wait behind a Run's polite gaps. Zoopla can apply every filter."""
+    Runs' client) so placing needn't wait behind a Run's polite gaps. Zoopla can apply every filter,
+    but has no townhome-only search: a townhome search looks at every house, and replies say so."""
 
     key = "zoopla"
     filters = ALL_FILTERS
-    home_type_notes = NO_HOME_TYPE_NOTES
+    home_type_notes: Mapping[HomeType, str] = MappingProxyType({
+        HomeType.TOWNHOME: "Zoopla can't tell townhomes from houses, so you'll see all houses."})
 
     def __init__(
         self,

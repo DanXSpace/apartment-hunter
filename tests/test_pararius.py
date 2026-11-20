@@ -71,6 +71,13 @@ def test_pararius_cannot_filter_by_baths():
         "https://www.pararius.com/apartments/amsterdam")
 
 
+def test_pararius_says_townhomes_mean_all_houses():
+    assert ParariusSource.home_type_notes == {
+        HomeType.TOWNHOME: "Pararius can't tell townhomes from houses, so you'll see all houses."}
+    assert source()[0].results_url(Criteria(AMSTERDAM, home_type=HomeType.TOWNHOME)) == (
+        "https://www.pararius.com/apartments/amsterdam/house")
+
+
 def test_parses_a_saved_real_page_leaving_out_the_highlighted_advert(fixture_html):
     pararius, _ = source(fixture_html("pararius/amsterdam_rentals.html"))
     page = pararius.fetch(Criteria(AMSTERDAM), 1)

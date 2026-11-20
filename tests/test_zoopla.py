@@ -58,8 +58,11 @@ def test_a_studio_minimum_is_zero_bedrooms():
     assert ("beds_min", "0") in query(url)
 
 
-def test_zoopla_can_apply_every_filter():
+def test_zoopla_can_apply_every_filter_but_says_townhomes_mean_all_houses():
     assert ZooplaSource.filters == ALL_FILTERS
+    assert ZooplaSource.home_type_notes == {
+        HomeType.TOWNHOME: "Zoopla can't tell townhomes from houses, so you'll see all houses."}
+    assert "/to-rent/houses/" in source()[0].results_url(Criteria(CAMDEN_TOWN, home_type=HomeType.TOWNHOME))
 
 
 def test_parses_a_saved_real_page_leaving_out_the_featured_adverts(fixture_html):

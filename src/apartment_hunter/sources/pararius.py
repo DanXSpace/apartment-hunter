@@ -5,8 +5,9 @@ the URL path) and reads Listings from the results list's HTML cards."""
 import json
 import math
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
+from types import MappingProxyType
 from typing import Any
 from urllib.parse import quote
 
@@ -15,7 +16,6 @@ from scrapling.parser import Selector
 from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, SourceLocation
 from apartment_hunter.models import Listing
 from apartment_hunter.sources import (
-    NO_HOME_TYPE_NOTES,
     BlockedError,
     CantPlace,
     Filter,
@@ -164,7 +164,8 @@ class ParariusSource:
 
     key = "pararius"
     filters = frozenset({Filter.PRICE, Filter.BEDS, Filter.HOME_TYPE, Filter.PETS})
-    home_type_notes = NO_HOME_TYPE_NOTES
+    home_type_notes: Mapping[HomeType, str] = MappingProxyType({
+        HomeType.TOWNHOME: "Pararius can't tell townhomes from houses, so you'll see all houses."})
 
     def __init__(
         self,
