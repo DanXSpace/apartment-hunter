@@ -163,6 +163,18 @@ def test_suggest_needs_three_characters_caches_and_throttles():
     assert len(http.requested) == 2
 
 
+def test_cached_gives_what_resolve_would_from_earlier_suggestions_without_a_request(fixture_html):
+    http = FakeHttp(fixture_html("photon/camden.json"))
+    lookup = AreaLookup(http, clock=FakeClock())
+    assert lookup.cached("Camden") is None
+    lookup.suggest("Camden")
+    # Nothing is named exactly "Camden", so it's Photon's top place, as resolve would pick.
+    assert lookup.cached(" camden ").display == "Camden, NJ, United States"
+    assert lookup.cached("Camden Town, London, United Kingdom") is None  # not typed before
+    assert lookup.cached("Kreuzberg") is None
+    assert len(http.requested) == 1
+
+
 def test_resolve_is_never_throttled():
     http = FakeHttp(CHICAGO_ANSWER)
     lookup = AreaLookup(http, clock=FakeClock(), min_gap_seconds=2)

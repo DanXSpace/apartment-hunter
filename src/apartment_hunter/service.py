@@ -244,10 +244,14 @@ class SearchService:
         self, server_id: int, area: str | None, search: str | None = None, current: str = ""
     ) -> list[tuple[str, str]]:
         """(label, value) pairs for the `sources` autocomplete: "All sites", then the Sources of the
-        country of the Area being typed (a suggestion ends with its country's name), else of the
-        Search's Area when editing `search`, else of every country. Narrowed to labels containing
-        `current`. Makes no place lookups."""
+        country of the Area being typed (a suggestion ends with its country's name; other text is
+        looked for in the place lookup's earlier answers), else of the Search's Area when editing
+        `search`, else of every country. Narrowed to labels containing `current`. Makes no place
+        lookups."""
         country = _country_named_in(area or "")
+        if country is None and area:
+            known = self.areas.cached(area)
+            country = COUNTRIES.get(known.country) if known is not None else None
         if country is None and search is not None:
             found = self.store.find_search(server_id, search)
             country = COUNTRIES.get(found.criteria.area.country) if found is not None else None

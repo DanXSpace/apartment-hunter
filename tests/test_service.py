@@ -26,13 +26,18 @@ CAMDEN = Area("Camden, London, United Kingdom", "neighborhood", "GB", 51.539, -0
 
 class FakeAreas:
     """Knows "Chicago, IL" and, for tests that add the UK, "Camden, London, United Kingdom" (neither
-    placed on any Source yet); anything else isn't a place. `down` makes every lookup fail."""
+    placed on any Source yet); anything else isn't a place. `down` makes every lookup fail. `cache` holds
+    what earlier suggestions found, by typed text."""
 
     def __init__(self):
         self.down: ScrapeError | None = None
+        self.cache: dict[str, Area] = {}
 
     def suggest(self, text: str) -> list[str]:
         return ["Chicago, IL"] if "chi" in text.casefold() else []
+
+    def cached(self, text: str) -> Area | None:
+        return self.cache.get(text)
 
     def resolve(self, text: str) -> Area:
         if self.down:
@@ -628,6 +633,14 @@ def test_with_no_area_typed_yet_the_sources_choices_offer_every_site(env, uk):
     assert env.service.source_choices(1, area=None) == [
         ("All sites", "all"), ("Zillow", "zillow"), ("Craigslist", "craigslist"), ("Rightmove", "rightmove")]
     assert env.service.source_choices(1, area="Lon") == env.service.source_choices(1, area=None)
+
+
+def test_an_area_typed_without_its_country_finds_it_from_earlier_suggestions(env, uk):
+    add_source(env, "craigslist")
+    env.areas.cache["Camden"] = CAMDEN  # the area autocomplete already looked "Camden" up
+    assert env.service.source_choices(1, area="Camden") == [("All sites", "all"), ("Rightmove", "rightmove")]
+    assert env.service.source_choices(1, area="Camde") == [
+        ("All sites", "all"), ("Zillow", "zillow"), ("Craigslist", "craigslist"), ("Rightmove", "rightmove")]
 
 
 def test_editing_without_a_new_area_offers_the_sources_of_the_searchs_area(env, uk):

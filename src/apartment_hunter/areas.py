@@ -60,6 +60,11 @@ class Areas(Protocol):
         """The place typed, as an Area with its country and no source locations yet."""
         ...
 
+    def cached(self, text: str) -> Area | None:
+        """What `resolve(text)` would give, from earlier lookups only (no request); None when `text`
+        hasn't been looked up or found no place."""
+        ...
+
 
 @dataclass(frozen=True)
 class Suggestions:
@@ -186,6 +191,12 @@ class AreaLookup:
             return [p.display for p in self._lookup(text).places]
         except ScrapeError:
             return []
+
+    def cached(self, text: str) -> Area | None:
+        text = text.strip()
+        with self._lock:
+            found = self._cache.get(text.casefold())
+        return best_place(found, text) if found is not None else None
 
     def resolve(self, text: str) -> Area:
         """The place typed exactly, or else Photon's top result when that is a place. Anything else,
