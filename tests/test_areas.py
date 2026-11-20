@@ -4,6 +4,7 @@ from urllib.parse import parse_qsl, urlsplit
 import pytest
 
 from apartment_hunter.areas import PHOTON_USER_AGENT, AreaLookup, AreaNotFound
+from apartment_hunter.countries import COUNTRIES
 from apartment_hunter.criteria import Area
 from apartment_hunter.sources import BlockedError, ScrapeError
 from apartment_hunter.sources.http import HttpResponse
@@ -63,7 +64,14 @@ def test_a_town_inside_a_city_is_a_neighborhood(fixture_html):
     assert lookup.resolve("Camden, SC, United States").kind == "city"
 
 
-def test_the_lookup_asks_photon_in_english_for_the_supported_countries_only():
+@pytest.fixture
+def us_and_uk_only(monkeypatch):
+    """Narrows the countries table to the US and the UK, so these tests don't change with each new row."""
+    for code in [code for code in COUNTRIES if code not in ("US", "GB")]:
+        monkeypatch.delitem(COUNTRIES, code)
+
+
+def test_the_lookup_asks_photon_in_english_for_the_supported_countries_only(us_and_uk_only):
     http = FakeHttp(CHICAGO_ANSWER)
     AreaLookup(http, clock=FakeClock()).suggest("Coeur d'Alene")
     url = urlsplit(http.requested[0])
@@ -115,7 +123,7 @@ def test_places_in_countries_the_bot_does_not_cover_are_left_out():
     assert lookup.suggest("Paris") == ["Paris, TX, United States"]
 
 
-def test_an_unknown_place_is_refused_naming_the_covered_countries():
+def test_an_unknown_place_is_refused_naming_the_covered_countries(us_and_uk_only):
     lookup = AreaLookup(FakeHttp(answer()), clock=FakeClock())
     with pytest.raises(AreaNotFound) as refused:
         lookup.resolve("Wien")
