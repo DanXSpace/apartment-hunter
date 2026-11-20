@@ -11,6 +11,7 @@ SOURCE_NAMES = {
     "rightmove": "Rightmove",
     "zoopla": "Zoopla",
     "bienici": "Bien'ici",
+    "kleinanzeigen": "Kleinanzeigen",
     "idealista_it": "Idealista Italy",
     "idealista_pt": "Idealista Portugal",
 }

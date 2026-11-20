@@ -15,6 +15,7 @@ from apartment_hunter.scheduler import Scheduler
 from apartment_hunter.service import Limits, NewSearch, SearchChanges, SearchError, SearchService
 from apartment_hunter.sources import SOURCE_NAMES, Filter, ScrapeError, SourcePage
 from apartment_hunter.sources.bienici import BieniciSource
+from apartment_hunter.sources.kleinanzeigen import KleinanzeigenSource
 from apartment_hunter.storage import Store
 from conftest import AT, CHICAGO, make_listing, make_search
 from fakes import MINUTE, FakeClock, FakeHttp, FakeNotifier, FakeSource
@@ -684,4 +685,36 @@ def test_a_search_in_france_reads_bienici_with_prices_in_euros(env, fixture_html
     assert pending.notes == ("Bien'ici can't filter by pets, so you'll see all of its matches.",)
     outcome = pending.wait(0)
     assert [(r.source, r.total, r.seeded) for r in outcome.results] == [("bienici", 1365, True)]
+    assert env.notifiers[10].listings == []
+
+
+BERLIN = Area("Berlin, Berlin, Germany", "city", "DE", 52.5170, 13.3889)
+
+
+class GermanAreas(FakeAreas):
+    """Also knows Berlin, Germany (not placed on any Source yet)."""
+
+    def resolve(self, text: str) -> Area:
+        return BERLIN if text == BERLIN.display else super().resolve(text)
+
+
+def test_a_search_in_germany_reads_kleinanzeigen_with_beds_as_rooms_and_prices_in_euros(env, fixture_html):
+    run_http = FakeHttp(fixture_html("kleinanzeigen/berlin_3_rooms_newest.html"))
+    kleinanzeigen = KleinanzeigenSource(run_http, now=lambda: AT,
+                                        lookup_http=FakeHttp(fixture_html("kleinanzeigen/suggest_berlin.json")))
+    env.service.sources = {**env.service.sources, "kleinanzeigen": kleinanzeigen}
+    env.service.runner = SearchRunner(env.service.sources, env.store, lambda s: env.notifiers[s.channel_id])
+    env.service.areas = GermanAreas()
+    search, pending = env.service.create(1, 10, 99, NewSearch(BERLIN.display, max_price=1500, min_beds=2,
+                                                              min_baths=1), can_post=True)
+    env.scheduler.run_pending()
+    assert search.sources == ("kleinanzeigen",)
+    assert search.name == "Berlin, Berlin, Germany · 2+ bd · 1+ ba · up to €1,500"
+    assert search.criteria.area.locations == {"kleinanzeigen": {"location_id": 3331, "slug": "berlin"}}
+    assert pending.notes == ("Kleinanzeigen can't filter by baths, so you'll see all of its matches.",)
+    outcome = pending.wait(0)
+    assert [(r.source, r.total, r.seeded) for r in outcome.results] == [("kleinanzeigen", 1732, True)]
+    assert run_http.requested[0] == (
+        "https://www.kleinanzeigen.de/s-wohnung-mieten/berlin/sortierung:neuste/anzeige:angebote/preis::1500/"
+        "c203l3331+wohnung_mieten.zimmer_d:3%2C")
     assert env.notifiers[10].listings == []

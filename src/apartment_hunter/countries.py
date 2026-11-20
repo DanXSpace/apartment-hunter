@@ -20,6 +20,7 @@ class Country:
 COUNTRIES: dict[str, Country] = {
     "US": Country("US", "United States", "$", ("zillow", "craigslist")),
     "GB": Country("GB", "United Kingdom", "£", ("rightmove", "zoopla")),
+    "DE": Country("DE", "Germany", "€", ("kleinanzeigen",)),
     "FR": Country("FR", "France", "€", ("bienici",)),
     "IT": Country("IT", "Italy", "€", ("idealista_it",)),
     "PT": Country("PT", "Portugal", "€", ("idealista_pt",)),
