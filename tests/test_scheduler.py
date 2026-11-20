@@ -1,17 +1,7 @@
 import pytest
 
 from apartment_hunter.scheduler import Scheduler, next_delay_seconds
-
-
-class FakeClock:
-    def __init__(self):
-        self.now = 1000.0
-
-    def __call__(self):
-        return self.now
-
-    def advance(self, minutes):
-        self.now += minutes * 60
+from fakes import MINUTE, FakeClock
 
 
 @pytest.fixture
@@ -28,9 +18,9 @@ def test_every_search_runs_once_at_start_then_on_the_interval(env):
     scheduler, clock, ran = env
     assert scheduler.run_pending() == 2
     assert ran == ["A", "B"]
-    clock.advance(14)
+    clock.advance(14 * MINUTE)
     assert scheduler.run_pending() == 0
-    clock.advance(1)
+    clock.advance(MINUTE)
     scheduler.run_pending()
     assert ran == ["A", "B", "A", "B"]
 
@@ -65,7 +55,7 @@ def test_paused_search_is_skipped_until_resumed(env):
     scheduler.pause("A")
     assert scheduler.is_paused("A")
     scheduler.run_pending()
-    clock.advance(15)
+    clock.advance(15 * MINUTE)
     scheduler.run_pending()
     assert ran == ["B", "B"]
     scheduler.resume("A")
@@ -76,17 +66,17 @@ def test_paused_search_is_skipped_until_resumed(env):
 def test_run_now_queues_a_search_ahead_of_its_interval(env):
     scheduler, clock, ran = env
     scheduler.run_pending()
-    clock.advance(5)
+    clock.advance(5 * MINUTE)
     scheduler.run_now("B")
     scheduler.run_now("B")
     assert ran == ["A", "B"]  # queued, not run inline
     assert scheduler.run_pending() == 1
     assert ran == ["A", "B", "B"]
     ran.clear()
-    clock.advance(14)  # t=19: B's interval restarted at t=5, so it isn't due until t=20
+    clock.advance(14 * MINUTE)  # t=19: B's interval restarted at t=5, so it isn't due until t=20
     scheduler.run_pending()
     assert ran == ["A"]
-    clock.advance(1)
+    clock.advance(MINUTE)
     scheduler.run_pending()
     assert ran == ["A", "B"]
 
@@ -116,7 +106,7 @@ def test_one_bad_run_does_not_stop_the_scheduler():
     scheduler.start()
     assert scheduler.run_pending() == 2
     assert ran == ["B"]
-    clock.advance(15)
+    clock.advance(15 * MINUTE)
     scheduler.run_pending()
     assert ran == ["B", "B"]
 
@@ -127,9 +117,9 @@ def test_added_search_runs_after_its_first_delay_then_on_the_interval():
     s.start()
     s.add("a", first_delay=300)
     assert s.run_pending() == 0
-    clock.advance(5)
+    clock.advance(5 * MINUTE)
     assert s.run_pending() == 1
-    clock.advance(15)
+    clock.advance(15 * MINUTE)
     s.run_pending()
     assert ran == ["a", "a"]
 

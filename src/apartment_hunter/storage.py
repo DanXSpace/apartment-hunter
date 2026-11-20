@@ -3,7 +3,8 @@ from __future__ import annotations
 import functools
 import sqlite3
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -160,6 +161,16 @@ class Store:
                     self._forget(search.id)
         except sqlite3.IntegrityError as error:
             raise DuplicateName(search.name) from error
+
+    @contextmanager
+    def unchanged(self, search: Search) -> Iterator[bool]:
+        """Yield whether `search` is still stored with the same Criteria and Sources, holding the lock
+        so an edit or delete from another thread can't land between that check and the writes made
+        inside the block."""
+        with self._lock:
+            current = self.get_search(search.id)
+            yield (current is not None and current.criteria == search.criteria
+                   and current.sources == search.sources)
 
     def _forget(self, search_id: str) -> None:
         self.db.execute("DELETE FROM listings WHERE search_id = ?", (search_id,))

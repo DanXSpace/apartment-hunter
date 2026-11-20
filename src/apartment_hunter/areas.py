@@ -2,6 +2,7 @@
 
 import json
 import math
+import threading
 import time
 import urllib.parse
 from collections.abc import Callable, Sequence
@@ -10,8 +11,8 @@ from importlib import resources
 from typing import Any, Protocol
 
 from apartment_hunter.criteria import Area
-from apartment_hunter.sources import BlockedError, ScrapeError
-from apartment_hunter.sources.http import HttpClient
+from apartment_hunter.sources import ScrapeError
+from apartment_hunter.sources.http import HttpClient, raise_for_status
 
 ACCEPTED_KINDS = {"city": 6, "zipcode": 7, "neighborhood": 8}
 MIN_SUGGEST_CHARACTERS = 3
@@ -51,32 +52,43 @@ def suggestions_url(text: str) -> str:
     return "https://www.zillowstatic.com/autocomplete/v3/suggestions?q=" + urllib.parse.quote(text, safe="")
 
 
-def parse_suggestions(body: str) -> list[Place]:
+@dataclass(frozen=True)
+class Suggestions:
+    """What the place lookup offered. `top_is_place` is True when Zillow's first result, before any
+    filtering, is one of `places` (an Address or a state listed first makes it False)."""
+
+    places: list[Place]
+    top_is_place: bool
+
+
+def _place(result: object) -> Place | None:
+    """The result as a Place when it is a city, neighborhood or ZIP code; otherwise None."""
+    if not isinstance(result, dict) or result.get("resultType") != "Region":
+        return None
+    meta: dict[str, Any] = result.get("metaData") or {}
+    kind = meta.get("regionType")
+    if kind not in ACCEPTED_KINDS:
+        return None
+    try:
+        return Place(
+            str(result["display"]), kind, int(meta["regionId"]), float(meta["lat"]), float(meta["lng"])
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def read_suggestions(body: str) -> Suggestions:
     try:
         results = json.loads(body).get("results", [])
     except (ValueError, AttributeError):
-        return []
-    places: list[Place] = []
-    for result in results:
-        if not isinstance(result, dict) or result.get("resultType") != "Region":
-            continue
-        meta: dict[str, Any] = result.get("metaData") or {}
-        kind = meta.get("regionType")
-        if kind not in ACCEPTED_KINDS:
-            continue
-        try:
-            places.append(
-                Place(
-                    str(result["display"]),
-                    kind,
-                    int(meta["regionId"]),
-                    float(meta["lat"]),
-                    float(meta["lng"]),
-                )
-            )
-        except (KeyError, TypeError, ValueError):
-            continue
-    return places
+        return Suggestions([], top_is_place=False)
+    found = [_place(result) for result in results]
+    places = [place for place in found if place is not None]
+    return Suggestions(places, top_is_place=bool(found) and found[0] is not None)
+
+
+def parse_suggestions(body: str) -> list[Place]:
+    return read_suggestions(body).places
 
 
 def load_craigslist_sites() -> list[CraigslistSite]:
@@ -98,6 +110,12 @@ def nearest_craigslist_site(lat: float, lon: float, sites: Sequence[CraigslistSi
 
 
 class AreaLookup:
+    """Suggests and resolves places through Zillow's place lookup. Safe to call from several threads.
+
+    The lock guards only the cache and the throttle clock, never an HTTP request, so one slow
+    lookup doesn't hold up other autocompletes.
+    """
+
     def __init__(
         self,
         http: HttpClient,
@@ -109,35 +127,45 @@ class AreaLookup:
         self._sites = list(sites) if sites is not None else load_craigslist_sites()
         self._clock = clock
         self._min_gap_seconds = min_gap_seconds
-        self._cache: dict[str, list[Place]] = {}
+        self._cache: dict[str, Suggestions] = {}
         self._last_request: float | None = None
+        self._lock = threading.Lock()
 
     def suggest(self, text: str) -> list[str]:
         text = text.strip()
         if len(text) < MIN_SUGGEST_CHARACTERS:
             return []
-        key = text.casefold()
-        if key in self._cache:
-            return [p.display for p in self._cache[key]]
-        now = self._clock()
-        if self._last_request is not None and now - self._last_request < self._min_gap_seconds:
-            return []
+        with self._lock:
+            cached = self._cache.get(text.casefold())
+            if cached is None:
+                now = self._clock()
+                if self._last_request is not None and now - self._last_request < self._min_gap_seconds:
+                    return []
+                self._last_request = now  # take the slot before letting go of the lock
+        if cached is not None:
+            return [p.display for p in cached.places]
         try:
-            return [p.display for p in self._lookup(text)]
+            return [p.display for p in self._lookup(text).places]
         except ScrapeError:
             return []
 
     def resolve(self, text: str) -> Area:
+        """The place typed exactly, or else Zillow's top result when that is a place. Anything else,
+        such as an address listed first, is AreaNotFound rather than a nearby place."""
         text = text.strip()
-        places = self._cache.get(text.casefold())
-        if places is None:
-            places = self._lookup(text)
-        if not places:
+        with self._lock:
+            found = self._cache.get(text.casefold())
+            if found is None:
+                self._last_request = self._clock()
+        if found is None:
+            found = self._lookup(text)
+        exact = [p for p in found.places if p.display.casefold() == text.casefold()]
+        place = exact[0] if exact else (found.places[0] if found.top_is_place else None)
+        if place is None:
             raise AreaNotFound(
                 f'I couldn\'t find a place called "{text}". '
                 'Try a city, neighborhood or ZIP code, like "Chicago, IL" or "60614".'
             )
-        place = next((p for p in places if p.display.casefold() == text.casefold()), places[0])
         radius = CITY_RADIUS_MILES if place.kind == "city" else SMALL_RADIUS_MILES
         return Area(
             place.display,
@@ -150,18 +178,16 @@ class AreaLookup:
             radius,
         )
 
-    def _lookup(self, text: str) -> list[Place]:
-        self._last_request = self._clock()
+    def _lookup(self, text: str) -> Suggestions:
+        """One request to the place lookup, without the lock; the caller has already taken the slot."""
         try:
             response = self._http.get(suggestions_url(text))
         except ScrapeError:
             raise
         except Exception as error:
             raise ScrapeError(_LOOKUP_DOWN) from error
-        if response.status in (403, 429):
-            raise BlockedError(_LOOKUP_DOWN)
-        if response.status != 200:
-            raise ScrapeError(_LOOKUP_DOWN)
-        places = parse_suggestions(response.text)
-        self._cache[text.casefold()] = places
-        return places
+        raise_for_status(response, blocked=_LOOKUP_DOWN, failed=_LOOKUP_DOWN)
+        found = read_suggestions(response.text)
+        with self._lock:
+            self._cache[text.casefold()] = found
+        return found

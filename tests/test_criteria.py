@@ -10,8 +10,16 @@ from conftest import CHICAGO, LINCOLN_PARK
 
 
 def test_summary_lists_criteria_in_a_fixed_order():
-    c = Criteria(CHICAGO, max_price=2400, min_beds=2, pets=Pets.DOGS)
-    assert summarize(c) == "Chicago, IL · 2+ bd · up to $2,400 · dogs"
+    c = Criteria(CHICAGO, max_price=2400, min_beds=2, pets=Pets.SMALL_DOGS)
+    assert summarize(c) == "Chicago, IL · 2+ bd · up to $2,400 · small dogs"
+
+
+def test_summary_names_large_dogs():
+    assert summarize(Criteria(CHICAGO, pets=Pets.LARGE_DOGS)) == "Chicago, IL · large dogs"
+
+
+def test_pets_values_are_stable():
+    assert [p.value for p in Pets] == ["none", "cats", "small_dogs", "large_dogs"]
 
 
 def test_summary_formats_every_field():
@@ -37,5 +45,5 @@ def test_summary_shows_whole_numbers_without_a_trailing_point_zero():
 
 def test_criteria_round_trip_through_json():
     c = Criteria(LINCOLN_PARK, min_price=1500, max_price=2400, min_beds=2, min_baths=1,
-                 home_type=HomeType.APARTMENT_CONDO, pets=Pets.DOGS)
+                 home_type=HomeType.APARTMENT_CONDO, pets=Pets.LARGE_DOGS)
     assert criteria_from_json(criteria_to_json(c)) == c

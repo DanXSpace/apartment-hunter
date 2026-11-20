@@ -4,6 +4,8 @@ import json
 from dataclasses import asdict, dataclass
 from enum import StrEnum
 
+from apartment_hunter.text import plain_number
+
 
 class HomeType(StrEnum):
     ANY = "any"
@@ -14,8 +16,9 @@ class HomeType(StrEnum):
 
 class Pets(StrEnum):
     NONE = "none"
-    DOGS = "dogs"
     CATS = "cats"
+    SMALL_DOGS = "small_dogs"
+    LARGE_DOGS = "large_dogs"
 
 
 @dataclass(frozen=True)
@@ -56,17 +59,12 @@ _HOME_TYPE_LABELS = {
 }
 
 
-def _count(n: float) -> str:
-    """2 and 2.0 both read "2"; 1.5 stays "1.5"."""
-    return str(int(n)) if float(n).is_integer() else str(n)
-
-
 def summarize(criteria: Criteria) -> str:
     parts = [criteria.area.display]
     if criteria.min_beds is not None:
-        parts.append("studio+" if criteria.min_beds == 0 else f"{_count(criteria.min_beds)}+ bd")
+        parts.append("studio+" if criteria.min_beds == 0 else f"{plain_number(criteria.min_beds)}+ bd")
     if criteria.min_baths is not None:
-        parts.append(f"{_count(criteria.min_baths)}+ ba")
+        parts.append(f"{plain_number(criteria.min_baths)}+ ba")
     if criteria.min_price is not None and criteria.max_price is not None:
         parts.append(f"${criteria.min_price:,}–${criteria.max_price:,}")
     elif criteria.max_price is not None:
@@ -76,7 +74,7 @@ def summarize(criteria: Criteria) -> str:
     if criteria.home_type is not HomeType.ANY:
         parts.append(_HOME_TYPE_LABELS[criteria.home_type])
     if criteria.pets is not Pets.NONE:
-        parts.append(criteria.pets.value)
+        parts.append(criteria.pets.value.replace("_", " "))
     return " · ".join(parts)
 
 

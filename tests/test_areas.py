@@ -14,7 +14,7 @@ from apartment_hunter.areas import (
 from apartment_hunter.criteria import Area
 from apartment_hunter.sources import BlockedError, ScrapeError
 from apartment_hunter.sources.http import HttpResponse
-from fakes import FakeHttp
+from fakes import FakeClock, FakeHttp
 
 SUGGEST_BODY = json.dumps(
     {
@@ -57,17 +57,6 @@ SITES = [
     CraigslistSite("newyork", 40.7166, -74.0),
     CraigslistSite("milwaukee", 43.0389, -87.9065),
 ]
-
-
-class FakeClock:
-    def __init__(self) -> None:
-        self.now = 1000.0
-
-    def __call__(self) -> float:
-        return self.now
-
-    def advance(self, seconds: float) -> None:
-        self.now += seconds
 
 
 def test_only_cities_neighborhoods_and_zip_codes_are_offered():
@@ -120,6 +109,29 @@ def test_suggest_needs_three_characters_caches_and_throttles():
     assert len(http.requested) == 2
 
 
+class InterruptingHttp(FakeHttp):
+    """While the first request is in flight, another autocomplete arrives and asks for suggestions."""
+
+    def __init__(self, response: str) -> None:
+        super().__init__(response)
+        self.lookup: AreaLookup | None = None
+        self.second: list[str] | None = None
+
+    def get(self, url: str) -> HttpResponse:
+        if self.lookup is not None and self.second is None:
+            self.second = self.lookup.suggest("Chica")
+        return super().get(url)
+
+
+def test_suggest_inside_the_gap_while_a_lookup_is_in_flight_makes_no_second_request():
+    http = InterruptingHttp(SUGGEST_BODY)
+    lookup = AreaLookup(http, SITES, clock=FakeClock(), min_gap_seconds=2)
+    http.lookup = lookup
+    assert lookup.suggest("Chi") == ["Lincoln Park, Chicago, IL", "Chicago, IL"]
+    assert http.second == []
+    assert len(http.requested) == 1
+
+
 class RaisingHttp:
     def get(self, url: str) -> HttpResponse:
         raise ScrapeError("Couldn't reach www.zillowstatic.com: timed out")
@@ -154,3 +166,28 @@ def test_suggest_returns_nothing_and_caches_nothing_when_the_lookup_fails():
     assert lookup.suggest("Chi") == ["Lincoln Park, Chicago, IL", "Chicago, IL"]
     assert lookup.suggest("Chi") == ["Lincoln Park, Chicago, IL", "Chicago, IL"]
     assert len(http.requested) == 2
+
+
+ADDRESS_FIRST_BODY = json.dumps({"results": [
+    {
+        "display": "1906 N Lincoln Park W Chicago, IL 60614",
+        "resultType": "Address",
+        "metaData": {"addressType": "rental_address"},
+    },
+    {
+        "display": "Lincoln Park, Chicago, IL",
+        "resultType": "Region",
+        "metaData": {"regionId": 269590, "regionType": "neighborhood", "lat": 41.9237, "lng": -87.6505},
+    },
+]})
+
+
+def test_resolve_refuses_an_address_instead_of_picking_a_nearby_place():
+    lookup = AreaLookup(FakeHttp(ADDRESS_FIRST_BODY), SITES, clock=FakeClock())
+    with pytest.raises(AreaNotFound, match='couldn\'t find a place called "1906 N Lincoln Park W'):
+        lookup.resolve("1906 N Lincoln Park W Chicago, IL 60614")
+
+
+def test_resolve_accepts_a_place_typed_exactly_even_when_an_address_comes_first():
+    lookup = AreaLookup(FakeHttp(ADDRESS_FIRST_BODY), SITES, clock=FakeClock())
+    assert lookup.resolve("lincoln park, chicago, il").zillow_region_id == 269590

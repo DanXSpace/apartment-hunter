@@ -1,9 +1,8 @@
 FROM python:3.12-slim-bookworm
 
-# Chromium runs in visible (non-headless) mode inside a virtual X display, because
-# apartments.com blocks headless browsers.
+# The Discord bot. No browser: it only makes outbound connections (Discord, Zillow, Craigslist).
 RUN apt-get update \
- && apt-get install -y --no-install-recommends chromium xvfb xauth fonts-liberation tini \
+ && apt-get install -y --no-install-recommends tini \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:0.12.19 /uv /usr/local/bin/uv
@@ -22,10 +21,7 @@ RUN useradd --create-home hunter && mkdir -p /app/data && chown hunter /app/data
 USER hunter
 
 ENV PATH=/opt/venv/bin:$PATH \
-    BROWSER_EXECUTABLE=chromium \
-    BROWSER_HEADLESS=false \
-    BROWSER_EXTRA_ARGS="--no-sandbox --disable-dev-shm-usage" \
-    APARTMENT_HUNTER_CONFIG=/app/config.toml
+    DATA_DIR=/app/data
 
 VOLUME ["/app/data"]
-ENTRYPOINT ["tini", "--", "xvfb-run", "--auto-servernum", "--server-args=-screen 0 1366x900x24", "apartment-hunter"]
+ENTRYPOINT ["tini", "--", "apartment-hunter"]

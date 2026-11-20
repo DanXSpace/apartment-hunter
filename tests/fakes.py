@@ -5,6 +5,20 @@ from apartment_hunter.sources import SourcePage
 from apartment_hunter.sources.http import HttpResponse
 
 _OK = HttpResponse(200, "ok")
+MINUTE = 60.0
+
+
+class FakeClock:
+    """A clock in seconds that moves only when told to. Tests that think in minutes multiply by MINUTE."""
+
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
 
 
 class FakeHttp:

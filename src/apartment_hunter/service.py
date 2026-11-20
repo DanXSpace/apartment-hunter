@@ -1,8 +1,9 @@
-"""The Search service: the one seam the bot (and the tests) call to create, list and run Searches."""
+"""The Search service: the one seam the bot (and the tests) call to create, list, change and run Searches."""
 
 from __future__ import annotations
 
 import logging
+import math
 import random
 import threading
 from collections.abc import Callable
@@ -11,7 +12,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from apartment_hunter.areas import AreaNotFound, Areas
-from apartment_hunter.criteria import Criteria, HomeType, Pets, summarize
+from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, summarize
 from apartment_hunter.models import Search
 from apartment_hunter.runner import RunOutcome, SearchRunner
 from apartment_hunter.scheduler import Scheduler
@@ -26,6 +27,7 @@ NO_PERMISSION = (
     "permissions here, or run the command in another channel."
 )
 CHANNEL_GONE = "I can't post in its channel anymore (it was deleted or I lost permission)."
+OWNER_ALERT_STREAK = 3
 AT_TOTAL_LIMIT = (
     "The bot is watching as many searches as it can right now. Try again later, or ask whoever runs it."
 )
@@ -60,6 +62,24 @@ class NewSearch:
 
 
 @dataclass(frozen=True)
+class SearchChanges:
+    """What someone asked to change in `/search edit`; None leaves that part as it is.
+
+    A minimum or maximum price, or a minimum of baths, of 0 removes it (beds 0 means "studio or bigger").
+    """
+
+    area: str | None = None
+    min_price: int | None = None
+    max_price: int | None = None
+    min_beds: float | None = None
+    min_baths: float | None = None
+    home_type: HomeType | None = None
+    pets: Pets | None = None
+    sources: tuple[str, ...] | None = None
+    name: str | None = None
+
+
+@dataclass(frozen=True)
 class SearchStatus:
     """How a Search is doing, for `/search list`. `state` is one of the statuses `/search help` explains."""
 
@@ -71,20 +91,39 @@ class SearchStatus:
 
 
 class Pending:
-    """Waits for the outcome of the first Run of a Search to finish after this Pending was created."""
+    """Waits for the outcome of the first Run of a Search to finish after this Pending was created.
+
+    If the Search is deleted first, the Pending is cancelled: waiting ends at once, with no outcome.
+    """
 
     def __init__(self) -> None:
         self._done = threading.Event()
         self._outcome: RunOutcome | None = None
+        self._cancelled = False
 
     def wait(self, timeout: float | None = None) -> RunOutcome | None:
-        """The Run's outcome, or None if it didn't finish within `timeout` seconds."""
+        """The Run's outcome, or None if it didn't finish within `timeout` seconds or was cancelled."""
         self._done.wait(timeout)
         return self._outcome
+
+    @property
+    def done(self) -> bool:
+        """True once the Run finished or the Pending was cancelled."""
+        return self._done.is_set()
+
+    @property
+    def cancelled(self) -> bool:
+        """True when the Search was deleted before the Run finished."""
+        return self._cancelled
 
     def resolve(self, outcome: RunOutcome) -> None:
         """Called by the service when the Run finishes."""
         self._outcome = outcome
+        self._done.set()
+
+    def cancel(self) -> None:
+        """Called by the service when the Search is deleted before the Run finished."""
+        self._cancelled = True
         self._done.set()
 
 
@@ -121,6 +160,7 @@ class SearchService:
         self.owner_id = owner_id
         self._pending: dict[str, list[Pending]] = {}
         self._pending_lock = threading.Lock()
+        self._last_check: dict[str, datetime] = {}
 
     def load(self) -> None:
         """Schedule every stored Search, spreading their first Runs across the first interval."""
@@ -139,12 +179,40 @@ class SearchService:
         except Exception:  # tell whoever waits now; the Scheduler carries on with other Searches
             log.exception("[%s] Unexpected error in a Run", search.name)
             outcome = RunOutcome(search_id, (), 0, error=RUN_FAILED)
+        if outcome.superseded:
+            # Edited or deleted mid-Run: the edit queued a fresh Run, which the waiters now wait for;
+            # a delete has already let them go.
+            return
         if outcome.channel_gone:
             self._pause_for_missing_channel(search_id)
+        if self.owner_id is not None:
+            for key in search.sources:
+                self._tell_owner_about(key, self.owner_id)
         with self._pending_lock:
             waiting = self._pending.pop(search_id, [])
         for pending in waiting:
             pending.resolve(outcome)
+
+    def _tell_owner_about(self, source: str, owner_id: int) -> None:
+        """DM the owner when `source` has failed 3 Runs in a row in every active Search using it, and
+        again once it works in any of them."""
+        using = [s for s in self.store.searches() if source in s.sources and not s.paused]
+        health = [self.store.source_health(s.id, source) for s in using]
+        name = SOURCE_NAMES.get(source, source)
+        alerted = self.store.owner_alert_sent(source)
+        if health and not alerted and all(h.consecutive_failures >= OWNER_ALERT_STREAK for h in health):
+            reason = health[-1].last_error or ""
+            self.direct_message(
+                owner_id,
+                f"⚠️ {name} has failed in every search for {OWNER_ALERT_STREAK} checks in a row: {reason} "
+                f"The host may be blocked, or {name} changed its pages.",
+            )
+            self.store.set_owner_alert_sent(source, True)
+        # Recovered only when a Search has read the Source successfully since: a successful Run always
+        # leaves it seeded, while a Search that hasn't run it yet is unseeded with no failures.
+        elif alerted and any(h.seeded and h.consecutive_failures == 0 for h in health):
+            self.direct_message(owner_id, f"✅ {name} is working again.")
+            self.store.set_owner_alert_sent(source, False)
 
     def _pause_for_missing_channel(self, search_id: str) -> None:
         search = self.store.get_search(search_id)  # re-read: it may have changed during the Run
@@ -223,14 +291,7 @@ class SearchService:
         if len(self.store.searches()) >= self.limits.total:
             raise SearchError(AT_TOTAL_LIMIT)
         sources = self._check_sources(new.sources)
-        try:
-            area = self.areas.resolve(new.area)
-        except AreaNotFound as error:
-            raise SearchError(str(error)) from error
-        except ScrapeError as error:
-            raise SearchError(
-                f"I couldn't look up places right now: {error} Try again in a minute."
-            ) from error
+        area = self._resolve_area(new.area)
         # A minimum of 0 means no minimum, except beds, where 0 means "studio or bigger".
         criteria = Criteria(
             area, new.min_price or None, new.max_price, new.min_beds, new.min_baths or None,
@@ -248,9 +309,126 @@ class SearchService:
             raise SearchError(
                 f'This server already has a search called "{name}". Pick another name with name:.'
             ) from error
+        self.scheduler.add(search.id, first_delay=self.interval_minutes * 60)
+        return search, self._run_now(search.id)
+
+    def find(self, server_id: int, name: str) -> Search:
+        """This server's Search called `name` (any case); raises SearchError when there's none."""
+        search = self.store.find_search(server_id, name)
+        if search is None:
+            raise SearchError(f'There\'s no search called "{name}" in this server. /search list shows them.')
+        return search
+
+    def edit(self, server_id: int, name: str, changes: SearchChanges) -> tuple[Search, Pending | None]:
+        """Change a Search. A Criteria or Sources change starts it over with a quiet Seeding run (the
+        Pending waits for it); a rename alone keeps everything it has seen. Refusals change nothing."""
+        search = self.find(server_id, name)
+        old = search.criteria
+        area = self._resolve_area(changes.area) if changes.area is not None else old.area
+        criteria = Criteria(
+            area,
+            _limit(changes.min_price, old.min_price),
+            _limit(changes.max_price, old.max_price),
+            old.min_beds if changes.min_beds is None else changes.min_beds,
+            _limit(changes.min_baths, old.min_baths),
+            changes.home_type or old.home_type,
+            changes.pets or old.pets,
+        )
+        sources = search.sources if changes.sources is None else self._check_sources(changes.sources)
+        reseed = criteria != old or sources != search.sources
+        chosen = (changes.name or "").strip()
+        # A Search still named after its criteria follows them, unless that name is taken here.
+        follows = not chosen and criteria != old and search.name == summarize(old)
+        new_name = chosen or (summarize(criteria) if follows else search.name)
+        edited = replace(search, name=new_name, criteria=criteria, sources=sources)
+        try:
+            self.store.update_search(edited, reseed=reseed)
+        except DuplicateName as error:
+            if not follows:
+                raise SearchError(
+                    f'This server already has a search called "{new_name}". Pick another name with name:.'
+                ) from error
+            edited = replace(edited, name=search.name)
+            self.store.update_search(edited, reseed=reseed)
+        return edited, self._run_now(search.id) if reseed else None
+
+    def pause(self, server_id: int, name: str) -> Search:
+        """Stop a Search's scheduled Runs until it's resumed."""
+        search = replace(self.find(server_id, name), paused=True)
+        self.store.update_search(search, reseed=False)
+        self.scheduler.pause(search.id)
+        return search
+
+    def resume(self, server_id: int, name: str) -> Search:
+        """Start a paused Search's scheduled Runs again, clearing any reason it needed attention."""
+        search = replace(self.find(server_id, name), paused=False, attention=None)
+        self.store.update_search(search, reseed=False)
+        self.scheduler.resume(search.id)
+        return search
+
+    def delete(self, server_id: int, name: str) -> None:
+        """Delete a Search and everything it has seen."""
+        self._delete(self.find(server_id, name).id)
+
+    def check(self, server_id: int, name: str) -> tuple[Search, Pending]:
+        """Run a Search now, at most once per `limits.check_gap_minutes`."""
+        search = self.find(server_id, name)
+        now = self.clock()
+        last = self._last_check.get(search.id)
+        if last is not None:
+            left = self.limits.check_gap_minutes - (now - last).total_seconds() / 60
+            if left > 0:
+                minutes = math.ceil(left)
+                raise SearchError(
+                    f'You can check "{search.name}" again in {minutes} minute{"" if minutes == 1 else "s"}.'
+                )
+        self._last_check[search.id] = now
+        return search, self._run_now(search.id)
+
+    def server_removed(self, server_id: int) -> int:
+        """The bot left a server: delete its Searches. Returns how many there were."""
+        searches = self.store.searches(server_id)
+        for search in searches:
+            self._delete(search.id)
+        return len(searches)
+
+    def keep_servers(self, server_ids: set[int]) -> int:
+        """The bot is in exactly these servers: delete the Searches of any other server (it was removed
+        while offline). Returns how many Searches were deleted."""
+        gone = {search.server_id for search in self.store.searches()} - server_ids
+        return sum(self.server_removed(server_id) for server_id in gone)
+
+    def _delete(self, search_id: str) -> None:
+        """Forget a Search everywhere; anyone waiting on its next Run stops waiting."""
+        self.scheduler.remove(search_id)
+        self.store.delete_search(search_id)
+        self._last_check.pop(search_id, None)
+        with self._pending_lock:
+            waiting = self._pending.pop(search_id, [])
+        for pending in waiting:
+            pending.cancel()
+
+    def _run_now(self, search_id: str) -> Pending:
+        """Queue a Search ahead of the schedule; the Pending waits for that Run."""
         pending = Pending()
         with self._pending_lock:
-            self._pending.setdefault(search.id, []).append(pending)
-        self.scheduler.add(search.id, first_delay=self.interval_minutes * 60)
-        self.scheduler.run_now(search.id)
-        return search, pending
+            self._pending.setdefault(search_id, []).append(pending)
+        self.scheduler.run_now(search_id)
+        return pending
+
+    def _resolve_area(self, text: str) -> Area:
+        try:
+            return self.areas.resolve(text)
+        except AreaNotFound as error:
+            raise SearchError(str(error)) from error
+        except ScrapeError as error:
+            raise SearchError(
+                f"I couldn't look up places right now: {error} Try again in a minute."
+            ) from error
+
+
+def _limit[N: (int, float)](change: N | None, current: N | None) -> N | None:
+    """A price or baths limit after an edit: None keeps `current`, 0 removes the limit."""
+    if change is None:
+        return current
+    return change or None

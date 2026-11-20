@@ -4,8 +4,5 @@ services:
     container_name: apartment-hunter
     restart: unless-stopped
     env_file: .env
-    shm_size: "1gb"
     volumes:
-      - ./config.toml:/app/config.toml:ro
       - ./data:/app/data
-      - /etc/localtime:/etc/localtime:ro   # alert timestamps in your local time

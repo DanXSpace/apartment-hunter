@@ -83,6 +83,21 @@ def test_burst_cap_sends_ten_and_summarises_the_rest(env):
     assert env.store.listing_count(SEARCH.id) == 14
 
 
+def test_burst_summary_does_not_call_price_drops_new_places(env):
+    ten_new = [make_listing(f"n{i}") for i in range(10)]
+    env.zillow.pages = [
+        [make_listing("d0", 2000), make_listing("d1", 2000)],
+        ten_new + [make_listing("d0", 1900), make_listing("n10")],
+        [make_listing(f"m{i}") for i in range(10)] + [make_listing("d1", 1800)],
+    ]
+    env.runner.run(SEARCH)
+    env.runner.run(SEARCH)
+    assert env.notifier.texts == [
+        "…and 2 more new places and price drops on Zillow: https://zillow.example/results"]
+    env.runner.run(SEARCH)
+    assert env.notifier.texts[-1] == "…and 1 more price drop on Zillow: https://zillow.example/results"
+
+
 def test_channel_gone_stops_the_run_without_marking_seen(env):
     env.zillow.pages = [[], [make_listing("a"), make_listing("b")]]
     env.runner.run(SEARCH)
