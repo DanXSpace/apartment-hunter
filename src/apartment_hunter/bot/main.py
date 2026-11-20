@@ -12,6 +12,7 @@ from apartment_hunter.appdata import LOG_FORMAT, AlreadyRunning, DataDir
 from apartment_hunter.areas import PHOTON_USER_AGENT, AreaLookup
 from apartment_hunter.bot.app import build_client
 from apartment_hunter.bot.posting import ChannelNotifier, DiscordBridge
+from apartment_hunter.bot.replies import coverage
 from apartment_hunter.countries import country
 from apartment_hunter.runner import SearchRunner
 from apartment_hunter.scheduler import Scheduler
@@ -34,8 +35,10 @@ log = logging.getLogger("apartment_hunter")
 
 DESCRIPTION = """\
 Run the Apartment Hunter Discord bot. People add it to their server and use /search to get new
-rentals posted in a channel: Zillow and Craigslist in the US, Rightmove in the UK (the sources
-option picks one site or all of the area's country).
+rentals posted in a channel. A search reads every site for its area's country (the sources
+option picks one):
+
+""" + "".join(f"  {line}\n" for line in coverage()) + """
 
 Settings come from environment variables, or from a .env file in the project folder
 (see .env.example). DISCORD_TOKEN is required.

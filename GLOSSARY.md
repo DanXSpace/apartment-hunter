@@ -1,6 +1,6 @@
 # Apartment Hunter
 
-A Discord bot that watches Zillow and Craigslist for rentals and posts new listings and price drops in the channel where a search was started.
+A Discord bot that watches rental sites in the US and Europe for rentals and posts new listings and price drops in the channel where a search was started.
 
 ## Watching
 
@@ -16,13 +16,13 @@ Where a Search looks: a city, neighborhood or postcode (ZIP code), resolved once
 _Avoid_: location, region (except Zillow's own region)
 
 **Country**:
-A supported country: its currency and its Sources. A Search's country is its Area's.
+A supported country (US, UK, Germany, France, Spain, Italy, Portugal, Netherlands): its currency and its Sources. A Search's country is its Area's.
 
 **Source location**:
 What a Source needs to search an Area (a Zillow region, a Craigslist site and radius, a site's URL slug…), worked out once by the Source and saved with the Search.
 
 **Source**:
-A listing site the bot reads (Zillow, Craigslist, Rightmove).
+A listing site the bot reads: Zillow, Craigslist, Rightmove, Zoopla, Kleinanzeigen, Bien'ici, Fotocasa, Idealista (Italy and Portugal, one Source each) or Pararius. Each belongs to one Country.
 _Avoid_: site, scraper
 
 **Listing**:

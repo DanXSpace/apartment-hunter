@@ -8,7 +8,7 @@ from apartment_hunter.criteria import Criteria
 class Listing:
     """One search-result card. Ranges cover multi-unit buildings; min == max for a single unit.
 
-    `source` is the key of the Source it came from ("zillow" or "craigslist"); a Search keys its
+    `source` is the key of the Source it came from ("zillow", "rightmove"…); a Search keys its
     Listings by (source, listing_id).
 
     Any numeric field may be None when the site doesn't show it (e.g. Zillow's "Contact for price").

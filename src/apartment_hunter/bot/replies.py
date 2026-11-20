@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from apartment_hunter.countries import COUNTRIES
 from apartment_hunter.criteria import summarize
 from apartment_hunter.models import Search
 from apartment_hunter.runner import RunOutcome
@@ -121,16 +122,26 @@ def _status_line(status: SearchStatus, now: datetime) -> str:
             f"{status.listings} seen · <#{search.channel_id}>")
 
 
+def coverage() -> list[str]:
+    """Each supported country with its Sources: "United Kingdom: Rightmove and Zoopla"."""
+    return [f"{c.name}: {_names(c.sources)}" for c in COUNTRIES.values()]
+
+
 def help_reply(limits: Limits, interval_minutes: float) -> str:
     """The reply to /search help."""
     return "\n".join([
-        "**Apartment Hunter** watches Zillow and Craigslist for rentals that match what you ask for and "
+        "**Apartment Hunter** watches rental sites for listings that match what you ask for and "
         "posts new listings and price drops in the channel where you started the search.",
         "",
+        "**Where it looks**",
+        *(f"• {line}, prices in {c.currency}"
+          for line, c in zip(coverage(), COUNTRIES.values(), strict=True)),
+        "",
         "**Commands**",
-        "• `/search new` starts a search here. Give it an area (a city, neighborhood or ZIP code) and, "
+        "• `/search new` starts a search here. Give it an area (a city, neighborhood or postcode) and, "
         "if you like, a price range, bedrooms, bathrooms, home type, pets and a name. "
-        "It checks both sites unless you pick one with `sources`. "
+        "A search checks every site for its country unless you pick one with `sources`. "
+        "Prices are monthly, in the area's currency, and bedrooms mean bedrooms, not rooms. "
         "The first check only takes note of what's already listed; after that, new places get posted.",
         "• `/search list` shows this server's searches and how they're doing.",
         "• `/search edit` changes a search. Changing what it looks for starts it fresh, quietly; "

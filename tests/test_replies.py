@@ -125,10 +125,30 @@ def test_help_reply_states_the_owner_s_limits():
     assert "about every 20 minutes" in text
 
 
-def test_help_reply_names_both_sources_and_the_sources_option():
+def test_help_reply_names_every_country_with_its_sources_and_currency():
     text = help_reply(Limits(), 15)
-    assert "watches Zillow and Craigslist for rentals" in text
-    assert "`sources`" in text
+    for line in [
+        "• United States: Zillow and Craigslist, prices in $",
+        "• United Kingdom: Rightmove and Zoopla, prices in £",
+        "• Germany: Kleinanzeigen, prices in €",
+        "• France: Bien'ici, prices in €",
+        "• Spain: Fotocasa, prices in €",
+        "• Italy: Idealista Italy, prices in €",
+        "• Portugal: Idealista Portugal, prices in €",
+        "• Netherlands: Pararius, prices in €",
+    ]:
+        assert line in text.splitlines()
+
+
+def test_help_reply_fits_in_one_discord_message():
+    assert len(help_reply(Limits(per_server=100, total=1000), 120)) <= 2000
+
+
+def test_help_reply_explains_the_sources_option_bedrooms_and_postcodes():
+    text = help_reply(Limits(), 15)
+    assert "every site for its country unless you pick one with `sources`" in text
+    assert "a city, neighborhood or postcode" in text
+    assert "bedrooms, not rooms" in text
 
 
 def test_edited_reply_says_when_it_takes_a_fresh_look():
