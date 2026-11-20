@@ -74,8 +74,9 @@ def _run(settings: BotSettings, data: DataDir) -> int:
     run_http = PoliteHttpClient(CurlHttpClient())
     # Autocomplete must answer within Discord's 3 seconds, so lookups never wait behind polite gaps.
     areas = AreaLookup(CurlHttpClient(timeout=2.5, headers={"User-Agent": PHOTON_USER_AGENT}))
-    # Placing an Area happens once per create or Area edit, outside Runs, so it skips the polite gaps.
-    place_http = CurlHttpClient()
+    # Placing an Area (once per create or Area edit) is spaced politely too, but by its own client so it
+    # doesn't queue behind a Run; the create/edit reply is deferred, so the wait is fine.
+    place_http = PoliteHttpClient(CurlHttpClient())
     sources: dict[str, Source] = {
         "zillow": ZillowSource(run_http, lookup_http=place_http),
         "craigslist": CraigslistSource(run_http),
