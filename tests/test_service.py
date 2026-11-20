@@ -548,6 +548,17 @@ def test_create_in_another_country_uses_its_sources_and_currency(env, uk):
     assert uk.locations == [{"at": CAMDEN.display}] and env.zillow.placed == []
 
 
+def test_a_uk_search_reads_rightmove_and_zoopla_by_default(env):
+    add_source(env, "rightmove")
+    add_source(env, "zoopla")
+    search, _ = env.service.create(1, 10, 99, NewSearch(CAMDEN.display), can_post=True)
+    assert search.sources == ("rightmove", "zoopla")
+    with pytest.raises(SearchError) as refused:
+        env.service.create(1, 10, 99, NewSearch(CAMDEN.display, sources=("zillow",)), can_post=True)
+    assert str(refused.value) == ("Zillow can't search Camden, London, United Kingdom. "
+                                  "Pick from: Rightmove, Zoopla.")
+
+
 def test_a_source_from_another_country_is_refused_with_the_valid_ones(env, uk):
     with pytest.raises(SearchError) as refused:
         env.service.create(1, 10, 99, NewSearch(CAMDEN.display, sources=("zillow",)), can_post=True)
