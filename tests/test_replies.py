@@ -64,6 +64,28 @@ def test_created_reply_suggests_narrowing_even_when_the_other_source_failed():
         "are only caught among the newest ones. Narrow it with /search edit to catch them all.")
 
 
+NOTES = ("Craigslist was left out: Craigslist has no site near Chicago, IL.",
+         "Zillow can't filter by pets, so you'll see all of its matches.")
+
+
+def test_created_reply_ends_with_the_notes_about_left_out_sources_and_filters():
+    outcome = RunOutcome("s1", (ok("zillow", 3),), 0)
+    assert created_reply(SEARCH, outcome, 15, NOTES) == (
+        '✅ Watching "Chicago 2BR". 3 places match right now. '
+        "I'll post new ones and price drops in this channel. "
+        "Craigslist was left out: Craigslist has no site near Chicago, IL. "
+        "Zillow can't filter by pets, so you'll see all of its matches.")
+    assert created_reply(SEARCH, None, 15, NOTES).endswith(
+        "I'll post here once it's done. Craigslist was left out: Craigslist has no site near Chicago, IL. "
+        "Zillow can't filter by pets, so you'll see all of its matches.")
+
+
+def test_edited_reply_ends_with_the_notes():
+    assert edited_reply(SEARCH, True, NOTES[1:]) == (
+        'Updated "Chicago 2BR". Its criteria changed, so it\'s taking a fresh look; '
+        "no alerts for what's already listed. Zillow can't filter by pets, so you'll see all of its matches.")
+
+
 def test_created_reply_when_everything_failed():
     outcome = RunOutcome("s1", (failed("zillow", "Zillow is blocking requests."),), 0)
     assert created_reply(SEARCH, outcome, 15) == (

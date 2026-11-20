@@ -27,8 +27,18 @@ def checking_reply(search: Search) -> str:
     return f'Checking {_names(search.sources)} for "{search.name}"…'
 
 
-def created_reply(search: Search, outcome: RunOutcome | None, interval_minutes: float) -> str:
-    """The reply to /search new once its Seeding run finished (or None: it's still going)."""
+def _with_notes(text: str, notes: tuple[str, ...]) -> str:
+    return " ".join((text, *notes))
+
+
+def created_reply(search: Search, outcome: RunOutcome | None, interval_minutes: float,
+                  notes: tuple[str, ...] = ()) -> str:
+    """The reply to /search new once its Seeding run finished (or None: it's still going), ending with
+    the service's notes (Sources left out, filters a Source can't apply)."""
+    return _with_notes(_created_text(search, outcome, interval_minutes), notes)
+
+
+def _created_text(search: Search, outcome: RunOutcome | None, interval_minutes: float) -> str:
     if outcome is None:
         return (f'⏳ Saved "{search.name}". '
                 "The first check is taking a while; I'll post here once it's done.")
@@ -48,10 +58,10 @@ def created_reply(search: Search, outcome: RunOutcome | None, interval_minutes: 
     return text
 
 
-def edited_reply(search: Search, reseeding: bool) -> str:
+def edited_reply(search: Search, reseeding: bool, notes: tuple[str, ...] = ()) -> str:
     if reseeding:
-        return (f'Updated "{search.name}". Its criteria changed, so it\'s taking a fresh look; '
-                "no alerts for what's already listed.")
+        return _with_notes(f'Updated "{search.name}". Its criteria changed, so it\'s taking a fresh look; '
+                           "no alerts for what's already listed.", notes)
     return f'Updated "{search.name}".'
 
 

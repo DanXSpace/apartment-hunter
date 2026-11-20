@@ -239,7 +239,7 @@ def build_client(
         outcome = await asyncio.to_thread(pending.wait, FIRST_OUTCOME_WAIT_SECONDS)
         await interaction.edit_original_response(
             content=first_check_cancelled_reply(created) if pending.cancelled
-            else created_reply(created, outcome, settings.interval_minutes)
+            else created_reply(created, outcome, settings.interval_minutes, pending.notes)
         )
         if not pending.done:
             task = asyncio.create_task(_post_when_done(bot, created, pending, settings.interval_minutes))
@@ -312,7 +312,8 @@ def build_client(
         except SearchError as error:
             await interaction.edit_original_response(content=refusal(error))
             return
-        await interaction.edit_original_response(content=edited_reply(edited, pending is not None))
+        await interaction.edit_original_response(
+            content=edited_reply(edited, pending is not None, pending.notes if pending else ()))
 
     @search.command(name="pause", description="Stop checking a search until you resume it")
     @app_commands.describe(search="The search to pause")
@@ -408,7 +409,7 @@ async def _post_when_done(bot: discord.Client, search: Search, pending: Pending,
     if pending.cancelled:
         text = first_check_cancelled_reply(search)
     elif outcome is not None:
-        text = created_reply(search, outcome, interval)
+        text = created_reply(search, outcome, interval, pending.notes)
     else:
         return
     channel = bot.get_channel(search.channel_id)
