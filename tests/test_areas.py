@@ -3,7 +3,9 @@ from urllib.parse import parse_qsl, urlsplit
 
 import pytest
 
+from apartment_hunter import areas
 from apartment_hunter.areas import PHOTON_USER_AGENT, AreaLookup, AreaNotFound
+from apartment_hunter.countries import COUNTRIES
 from apartment_hunter.criteria import Area
 from apartment_hunter.sources import BlockedError, ScrapeError
 from apartment_hunter.sources.http import HttpResponse
@@ -22,6 +24,12 @@ def feature(name: str, osm_value: str, countrycode: str, lon: float, lat: float,
 
 def answer(*features: dict) -> str:
     return json.dumps({"type": "FeatureCollection", "features": list(features)})
+
+
+@pytest.fixture
+def us_and_uk(monkeypatch):
+    """Pins the countries table to the US and the UK, so these tests don't change as countries are added."""
+    monkeypatch.setattr(areas, "COUNTRIES", {code: COUNTRIES[code] for code in ("US", "GB")})
 
 
 CHICAGO = feature("Chicago", "city", "US", -87.6244212, 41.8755616, county="Cook County", state="Illinois",
@@ -63,7 +71,7 @@ def test_a_town_inside_a_city_is_a_neighborhood(fixture_html):
     assert lookup.resolve("Camden, SC, United States").kind == "city"
 
 
-def test_the_lookup_asks_photon_in_english_for_the_supported_countries_only():
+def test_the_lookup_asks_photon_in_english_for_the_supported_countries_only(us_and_uk):
     http = FakeHttp(CHICAGO_ANSWER)
     AreaLookup(http, clock=FakeClock()).suggest("Coeur d'Alene")
     url = urlsplit(http.requested[0])
@@ -108,14 +116,14 @@ def test_a_uk_city_without_a_city_field_names_its_nation():
         "London, England, United Kingdom"]
 
 
-def test_places_in_countries_the_bot_does_not_cover_are_left_out():
+def test_places_in_countries_the_bot_does_not_cover_are_left_out(us_and_uk):
     paris = feature("Paris", "city", "FR", 2.35, 48.86, state="Île-de-France")
     paris_tx = feature("Paris", "town", "US", -95.55, 33.66, state="Texas")
     lookup = AreaLookup(FakeHttp(answer(paris, paris_tx)), clock=FakeClock())
     assert lookup.suggest("Paris") == ["Paris, TX, United States"]
 
 
-def test_an_unknown_place_is_refused_naming_the_covered_countries():
+def test_an_unknown_place_is_refused_naming_the_covered_countries(us_and_uk):
     lookup = AreaLookup(FakeHttp(answer()), clock=FakeClock())
     with pytest.raises(AreaNotFound) as refused:
         lookup.resolve("Wien")
