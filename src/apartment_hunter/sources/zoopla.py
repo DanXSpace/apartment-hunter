@@ -14,6 +14,7 @@ from apartment_hunter.models import Listing
 from apartment_hunter.sources import (
     ALL_FILTERS,
     NO_HOME_TYPE_NOTES,
+    PLACE_NOTE,
     BlockedError,
     CantPlace,
     ScrapeError,
@@ -47,13 +48,6 @@ _LAYOUT_CHANGED = "Zoopla's page layout changed, so listings couldn't be read. T
 _DATA_CHUNK = re.compile(r'self\.__next_f\.push\(\[1,(".*?")\]\)</script>', re.S)
 
 
-def place_query(area: Area) -> str:
-    """What to type into Zoopla's search box: the place's own name, or a postcode's outward code
-    ("SW11" for "SW11 6HR"), which is the district a person typing a postcode means."""
-    name = area.display.split(", ")[0]
-    return name.split(" ")[0] if area.kind == "zipcode" else name
-
-
 def place_search_url(query: str) -> str:
     """Zoopla's search box: it redirects to the results page of the place it understood the text as,
     or to a "we could not find a place name" page."""
@@ -67,13 +61,16 @@ def _plain(name: str) -> str:
 
 def found_place(html: str, query: str) -> str | None:
     """The place identifier ("camden-town", "london/croydon", "sw11") of the results page the search
-    box landed on, when that place is named like `query`; None when Zoopla found no such place."""
+    box landed on, when that place is named like `query`; None when Zoopla found no such place. A full
+    postcode's page is labelled with its street ("Bolingbroke Grove, London SW11") and named by its
+    identifier's last part ("london/bolingbroke-grove/sw11-6hr")."""
     try:
         geo = embedded_value(page_data(html), "geoData")
         identifier, label = str(geo["geoIdentifier"]), str(geo["label"])
     except (ValueError, KeyError, TypeError):
         return None
-    return identifier if identifier and _plain(label.split(",")[0]) == _plain(query) else None
+    names = (label.split(",")[0], identifier.rsplit("/", 1)[-1])
+    return identifier if identifier and _plain(query) in {_plain(name) for name in names} else None
 
 
 def search_url(criteria: Criteria, page: int = 1) -> str:
@@ -185,16 +182,30 @@ class ZooplaSource:
         self._lookup_http = lookup_http or http
 
     def place(self, area: Area) -> SourceLocation:
-        query = place_query(area)
+        """The place named like the Area's own name. A full postcode is searched as itself when
+        Zoopla knows it, else as its outward code ("SW11" for "SW11 6HR"), with a note saying so."""
+        name = area.display.split(", ")[0]
+        geo = self._look_up(name)
+        if geo is not None:
+            return {"geo": geo}
+        outward = name.split(" ")[0]
+        geo = self._look_up(outward) if area.kind == "zipcode" and outward != name else None
+        if geo is None:
+            raise CantPlace(f"Zoopla doesn't know {area.display}.")
+        return {"geo": geo, PLACE_NOTE: f"Zoopla doesn't know {name}, so it searches all of {outward}."}
+
+    def _look_up(self, query: str) -> str | None:
+        """The place Zoopla's search box lands on for `query`. The search box sometimes answers with a
+        server error for a while; that leaves Zoopla out of this Search rather than refusing it."""
         try:
             response = self._lookup_http.get(place_search_url(query))
         except ScrapeError as error:
             raise ScrapeError(LOOKUP_DOWN) from error
+        if response.status >= 500:
+            raise CantPlace(f"Zoopla's place search answered with an error (HTTP {response.status}). "
+                            "Try adding it again later with /search edit.")
         raise_for_status(response, blocked=LOOKUP_DOWN, failed=LOOKUP_DOWN)
-        geo = found_place(response.text, query)
-        if geo is None:
-            raise CantPlace(f"Zoopla doesn't know {area.display}.")
-        return {"geo": geo}
+        return found_place(response.text, query)
 
     def results_url(self, criteria: Criteria) -> str:
         return search_url(criteria, 1)

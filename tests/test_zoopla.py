@@ -10,7 +10,7 @@ from apartment_hunter.sources import ALL_FILTERS, BlockedError, CantPlace, Scrap
 from apartment_hunter.sources.http import HttpResponse
 from apartment_hunter.sources.zoopla import ZooplaSource
 from conftest import AT
-from fakes import FakeHttp
+from fakes import FakeHttp, ScriptedHttp
 
 CAMDEN_TOWN = Area("Camden Town, London, United Kingdom", "neighborhood", "GB", 51.5390, -0.1426, locations={
     "zoopla": {"geo": "camden-town"},
@@ -144,13 +144,37 @@ def test_place_finds_the_place_through_zooplas_search_box(fixture_html):
     assert lookups.requested == ["https://www.zoopla.co.uk/search/?q=camden+town&section=to-rent"]
 
 
-def test_place_finds_a_postcode_by_its_outward_code():
-    lookups = FakeHttp(zoopla_page([], 0) + "<script>self.__next_f.push([1,"
-                       + json.dumps('{"geoData":{"geoIdentifier":"sw11","label":"SW11"}}') + "])</script>")
+SW11_6HR = Area("SW11 6HR, London, United Kingdom", "zipcode", "GB", 51.47, -0.16)
+SW11_PAGE = (zoopla_page([], 0) + "<script>self.__next_f.push([1,"
+             + json.dumps('{"geoData":{"geoIdentifier":"sw11","geoType":"outcode","label":"SW11"}}')
+             + "])</script>")
+
+
+def test_place_finds_a_full_postcode_through_zooplas_search_box(fixture_html):
+    lookups = FakeHttp(fixture_html("zoopla/search_sw11_6hr.html"))
     zoopla = ZooplaSource(FakeHttp(), now=lambda: AT, lookup_http=lookups)
-    sw11 = Area("SW11 6HR, London, United Kingdom", "zipcode", "GB", 51.47, -0.16)
-    assert zoopla.place(sw11) == {"geo": "sw11"}
-    assert lookups.requested == ["https://www.zoopla.co.uk/search/?q=sw11&section=to-rent"]
+    assert zoopla.place(SW11_6HR) == {"geo": "london/bolingbroke-grove/sw11-6hr"}
+    assert lookups.requested == ["https://www.zoopla.co.uk/search/?q=sw11+6hr&section=to-rent"]
+
+
+def test_a_postcode_zoopla_does_not_know_falls_back_to_its_outward_code_and_says_so(fixture_html):
+    lookups = ScriptedHttp(fixture_html("zoopla/search_not_found.html"), SW11_PAGE)
+    zoopla = ZooplaSource(FakeHttp(), now=lambda: AT, lookup_http=lookups)
+    assert zoopla.place(SW11_6HR) == {
+        "geo": "sw11", "note": "Zoopla doesn't know SW11 6HR, so it searches all of SW11."}
+    assert lookups.requested[1] == "https://www.zoopla.co.uk/search/?q=sw11&section=to-rent"
+
+
+def test_zooplas_search_box_answering_with_a_server_error_leaves_zoopla_out():
+    with pytest.raises(CantPlace) as refused:
+        source(HttpResponse(503, ""))[0].place(replace(CAMDEN_TOWN, locations={}))
+    assert str(refused.value) == ("Zoopla's place search answered with an error (HTTP 503). "
+                                  "Try adding it again later with /search edit.")
+
+
+class UnreachableHttp:
+    def get(self, url: str) -> HttpResponse:
+        raise ScrapeError("Couldn't reach www.zoopla.co.uk: timed out")
 
 
 def test_place_refuses_a_place_zoopla_does_not_know(fixture_html):
@@ -167,9 +191,10 @@ def test_place_refuses_a_search_that_lands_on_a_differently_named_place(fixture_
         zoopla.place(kentish)
 
 
-def test_place_raises_a_scrape_error_when_zoopla_does_not_answer():
+def test_place_raises_a_scrape_error_when_zoopla_cannot_be_reached():
+    zoopla = ZooplaSource(FakeHttp(), now=lambda: AT, lookup_http=UnreachableHttp())
     with pytest.raises(ScrapeError, match="Zoopla's place lookup isn't answering"):
-        source(HttpResponse(500, ""))[0].place(replace(CAMDEN_TOWN, locations={}))
+        zoopla.place(replace(CAMDEN_TOWN, locations={}))
 
 
 def test_place_treats_a_garbled_answer_as_no_match():
