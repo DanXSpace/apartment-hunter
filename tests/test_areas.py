@@ -11,15 +11,6 @@ from apartment_hunter.sources.http import HttpResponse
 from fakes import FakeClock, FakeHttp
 
 
-@pytest.fixture
-def us_and_uk_only(monkeypatch):
-    """Narrows the countries table to the US and the UK, so tests that spell out the covered countries
-    don't change each time a country is added."""
-    for code in list(COUNTRIES):
-        if code not in ("US", "GB"):
-            monkeypatch.delitem(COUNTRIES, code)
-
-
 def feature(name: str, osm_value: str, countrycode: str, lon: float, lat: float, osm_key: str = "place",
             extent: list[float] | None = None, **props: str) -> dict:
     properties: dict = {"osm_key": osm_key, "osm_value": osm_value, "name": name,
@@ -73,6 +64,13 @@ def test_a_town_inside_a_city_is_a_neighborhood(fixture_html):
     assert lookup.resolve("Camden, SC, United States").kind == "city"
 
 
+@pytest.fixture
+def us_and_uk_only(monkeypatch):
+    """Narrows the countries table to the US and the UK, so these tests don't change with each new row."""
+    for code in [code for code in COUNTRIES if code not in ("US", "GB")]:
+        monkeypatch.delitem(COUNTRIES, code)
+
+
 def test_the_lookup_asks_photon_in_english_for_the_supported_countries_only(us_and_uk_only):
     http = FakeHttp(CHICAGO_ANSWER)
     AreaLookup(http, clock=FakeClock()).suggest("Coeur d'Alene")
@@ -118,7 +116,7 @@ def test_a_uk_city_without_a_city_field_names_its_nation():
         "London, England, United Kingdom"]
 
 
-def test_places_in_countries_the_bot_does_not_cover_are_left_out():
+def test_places_in_countries_the_bot_does_not_cover_are_left_out(us_and_uk_only):
     paris = feature("Paris", "city", "FR", 2.35, 48.86, state="Île-de-France")
     paris_tx = feature("Paris", "town", "US", -95.55, 33.66, state="Texas")
     lookup = AreaLookup(FakeHttp(answer(paris, paris_tx)), clock=FakeClock())

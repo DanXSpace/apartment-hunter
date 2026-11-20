@@ -9,6 +9,11 @@ SOURCE_NAMES = {
     "zillow": "Zillow",
     "craigslist": "Craigslist",
     "rightmove": "Rightmove",
+    "zoopla": "Zoopla",
+    "bienici": "Bien'ici",
+    "fotocasa": "Fotocasa",
+    "idealista_it": "Idealista Italy",
+    "idealista_pt": "Idealista Portugal",
     "pararius": "Pararius",
 }
 
