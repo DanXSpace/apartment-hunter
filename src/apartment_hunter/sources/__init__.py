@@ -12,8 +12,10 @@ SOURCE_NAMES = {
     "zoopla": "Zoopla",
     "bienici": "Bien'ici",
     "kleinanzeigen": "Kleinanzeigen",
+    "fotocasa": "Fotocasa",
     "idealista_it": "Idealista Italy",
     "idealista_pt": "Idealista Portugal",
+    "pararius": "Pararius",
 }
 
 

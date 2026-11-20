@@ -22,8 +22,10 @@ COUNTRIES: dict[str, Country] = {
     "GB": Country("GB", "United Kingdom", "£", ("rightmove", "zoopla")),
     "DE": Country("DE", "Germany", "€", ("kleinanzeigen",)),
     "FR": Country("FR", "France", "€", ("bienici",)),
+    "ES": Country("ES", "Spain", "€", ("fotocasa",)),
     "IT": Country("IT", "Italy", "€", ("idealista_it",)),
     "PT": Country("PT", "Portugal", "€", ("idealista_pt",)),
+    "NL": Country("NL", "Netherlands", "€", ("pararius",)),
 }
 
 
