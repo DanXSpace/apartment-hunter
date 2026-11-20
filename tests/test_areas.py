@@ -3,7 +3,6 @@ from urllib.parse import parse_qsl, urlsplit
 
 import pytest
 
-from apartment_hunter import areas
 from apartment_hunter.areas import PHOTON_USER_AGENT, AreaLookup, AreaNotFound
 from apartment_hunter.countries import COUNTRIES
 from apartment_hunter.criteria import Area
@@ -66,12 +65,13 @@ def test_a_town_inside_a_city_is_a_neighborhood(fixture_html):
 
 
 @pytest.fixture
-def us_and_uk(monkeypatch):
-    """The countries table as US and UK only, so tests of its wording don't change with each new row."""
-    monkeypatch.setattr(areas, "COUNTRIES", {code: COUNTRIES[code] for code in ("US", "GB")})
+def us_and_uk_only(monkeypatch):
+    """Narrows the countries table to the US and the UK, so these tests don't change with each new row."""
+    for code in [code for code in COUNTRIES if code not in ("US", "GB")]:
+        monkeypatch.delitem(COUNTRIES, code)
 
 
-def test_the_lookup_asks_photon_in_english_for_the_supported_countries_only(us_and_uk):
+def test_the_lookup_asks_photon_in_english_for_the_supported_countries_only(us_and_uk_only):
     http = FakeHttp(CHICAGO_ANSWER)
     AreaLookup(http, clock=FakeClock()).suggest("Coeur d'Alene")
     url = urlsplit(http.requested[0])
@@ -116,14 +116,14 @@ def test_a_uk_city_without_a_city_field_names_its_nation():
         "London, England, United Kingdom"]
 
 
-def test_places_in_countries_the_bot_does_not_cover_are_left_out():
+def test_places_in_countries_the_bot_does_not_cover_are_left_out(us_and_uk_only):
     paris = feature("Paris", "city", "FR", 2.35, 48.86, state="Île-de-France")
     paris_tx = feature("Paris", "town", "US", -95.55, 33.66, state="Texas")
     lookup = AreaLookup(FakeHttp(answer(paris, paris_tx)), clock=FakeClock())
     assert lookup.suggest("Paris") == ["Paris, TX, United States"]
 
 
-def test_an_unknown_place_is_refused_naming_the_covered_countries(us_and_uk):
+def test_an_unknown_place_is_refused_naming_the_covered_countries(us_and_uk_only):
     lookup = AreaLookup(FakeHttp(answer()), clock=FakeClock())
     with pytest.raises(AreaNotFound) as refused:
         lookup.resolve("Wien")

@@ -14,9 +14,10 @@ from apartment_hunter.runner import SearchRunner
 from apartment_hunter.scheduler import Scheduler
 from apartment_hunter.service import Limits, NewSearch, SearchChanges, SearchError, SearchService
 from apartment_hunter.sources import SOURCE_NAMES, Filter, ScrapeError, SourcePage
+from apartment_hunter.sources.bienici import BieniciSource
 from apartment_hunter.storage import Store
 from conftest import AT, CHICAGO, make_listing, make_search
-from fakes import MINUTE, FakeClock, FakeNotifier, FakeSource
+from fakes import MINUTE, FakeClock, FakeHttp, FakeNotifier, FakeSource
 
 UNPLACED_CHICAGO = replace(CHICAGO, locations={})
 CAMDEN = Area("Camden, London, United Kingdom", "neighborhood", "GB", 51.539, -0.1426)
@@ -547,6 +548,17 @@ def test_create_in_another_country_uses_its_sources_and_currency(env, uk):
     assert uk.locations == [{"at": CAMDEN.display}] and env.zillow.placed == []
 
 
+def test_a_uk_search_reads_rightmove_and_zoopla_by_default(env):
+    add_source(env, "rightmove")
+    add_source(env, "zoopla")
+    search, _ = env.service.create(1, 10, 99, NewSearch(CAMDEN.display), can_post=True)
+    assert search.sources == ("rightmove", "zoopla")
+    with pytest.raises(SearchError) as refused:
+        env.service.create(1, 10, 99, NewSearch(CAMDEN.display, sources=("zillow",)), can_post=True)
+    assert str(refused.value) == ("Zillow can't search Camden, London, United Kingdom. "
+                                  "Pick from: Rightmove, Zoopla.")
+
+
 def test_a_source_from_another_country_is_refused_with_the_valid_ones(env, uk):
     with pytest.raises(SearchError) as refused:
         env.service.create(1, 10, 99, NewSearch(CAMDEN.display, sources=("zillow",)), can_post=True)
@@ -645,3 +657,31 @@ def test_check_notes_the_filters_a_source_cannot_apply(env, uk):
     env.service.create(1, 10, 99, NewSearch(CAMDEN.display, name="Flat", pets=Pets.CATS), can_post=True)
     _, pending = env.service.check(1, "Flat")
     assert pending.notes == ("Rightmove can't filter by pets, so you'll see all of its matches.",)
+
+
+PARIS = Area("Paris, Ile-de-France, France", "city", "FR", 48.8589, 2.3470)
+
+
+class FrenchAreas(FakeAreas):
+    """Also knows Paris, France (not placed on any Source yet)."""
+
+    def resolve(self, text: str) -> Area:
+        return PARIS if text == PARIS.display else super().resolve(text)
+
+
+def test_a_search_in_france_reads_bienici_with_prices_in_euros(env, fixture_html):
+    bienici = BieniciSource(FakeHttp(fixture_html("bienici/paris_flats_rent.json")), now=lambda: AT,
+                            lookup_http=FakeHttp(fixture_html("bienici/suggest_paris.json")))
+    env.service.sources = {**env.service.sources, "bienici": bienici}
+    env.service.runner = SearchRunner(env.service.sources, env.store, lambda s: env.notifiers[s.channel_id])
+    env.service.areas = FrenchAreas()
+    search, pending = env.service.create(1, 10, 99, NewSearch(PARIS.display, max_price=1500, min_beds=2,
+                                                              pets=Pets.CATS), can_post=True)
+    env.scheduler.run_pending()
+    assert search.sources == ("bienici",)
+    assert search.name == "Paris, Ile-de-France, France · 2+ bd · up to €1,500 · cats"
+    assert search.criteria.area.locations == {"bienici": {"zone_ids": "-7444", "slug": "paris-75000"}}
+    assert pending.notes == ("Bien'ici can't filter by pets, so you'll see all of its matches.",)
+    outcome = pending.wait(0)
+    assert [(r.source, r.total, r.seeded) for r in outcome.results] == [("bienici", 1365, True)]
+    assert env.notifiers[10].listings == []

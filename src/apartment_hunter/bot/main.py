@@ -18,11 +18,14 @@ from apartment_hunter.scheduler import Scheduler
 from apartment_hunter.service import Limits, SearchService
 from apartment_hunter.settings import BotSettings, SettingsError, load_settings
 from apartment_hunter.sources import Source
+from apartment_hunter.sources.bienici import BieniciSource
 from apartment_hunter.sources.craigslist import CraigslistSource
 from apartment_hunter.sources.fotocasa import FotocasaSource
 from apartment_hunter.sources.http import CurlHttpClient, PoliteHttpClient
+from apartment_hunter.sources.idealista import ITALY, PORTUGAL, IdealistaSource
 from apartment_hunter.sources.rightmove import RightmoveSource
 from apartment_hunter.sources.zillow import ZillowSource
+from apartment_hunter.sources.zoopla import ZooplaSource
 from apartment_hunter.storage import Store
 
 log = logging.getLogger("apartment_hunter")
@@ -72,6 +75,10 @@ def _run(settings: BotSettings, data: DataDir) -> int:
         "zillow": ZillowSource(run_http, lookup_http=place_http),
         "craigslist": CraigslistSource(run_http),
         "rightmove": RightmoveSource(run_http, lookup_http=place_http),
+        "zoopla": ZooplaSource(run_http, lookup_http=place_http),
+        "idealista_it": IdealistaSource(ITALY, run_http),
+        "idealista_pt": IdealistaSource(PORTUGAL, run_http),
+        "bienici": BieniciSource(run_http, lookup_http=place_http),
         "fotocasa": FotocasaSource(run_http, lookup_http=place_http),
     }
 
