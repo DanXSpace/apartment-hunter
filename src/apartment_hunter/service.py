@@ -252,7 +252,7 @@ class SearchService:
         foreign = [key for key in sources if key in self.sources and key not in valid]
         if foreign:
             names = join_and([SOURCE_NAMES.get(key, key) for key in foreign])
-            raise SearchError(f"{names} can't search in {country.name}. Pick from: {available}.")
+            raise SearchError(f"{names} can't search {area.display}. Pick from: {available}.")
         unknown = " or ".join(SOURCE_NAMES.get(key, key) for key in sources if key not in valid)
         if unknown:
             raise SearchError(f"I can't check {unknown} yet. Pick from: {available}.")

@@ -1,11 +1,12 @@
 import json
+from dataclasses import replace
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
 from apartment_hunter.criteria import Criteria, HomeType, Pets
 from apartment_hunter.models import Listing
-from apartment_hunter.sources import BlockedError, ScrapeError
+from apartment_hunter.sources import BlockedError, CantPlace, ScrapeError
 from apartment_hunter.sources.http import HttpResponse
 from apartment_hunter.sources.zillow import ZillowSource, parse_search_page, search_url
 from conftest import AT, CHICAGO, LINCOLN_PARK
@@ -160,3 +161,32 @@ def test_parses_a_saved_real_page(fixture_html):
     assert all(
         c.listing.listing_id and c.listing.url.startswith("https://www.zillow.com/") and c.listing.address
         for c in cards)
+
+
+PLACES_BODY = json.dumps({"results": [
+    {"display": "Lincoln Park, Chicago, IL", "resultType": "Region",
+     "metaData": {"regionId": 269590, "regionType": "neighborhood", "lat": 41.9237, "lng": -87.6505}},
+    {"display": "Chicago, IL", "resultType": "Region",
+     "metaData": {"regionId": 17426, "regionType": "city", "lat": 41.8781, "lng": -87.6298}},
+]})
+
+
+def test_place_finds_the_zillow_region_through_its_place_lookup():
+    runs, lookups = FakeHttp(), FakeHttp(PLACES_BODY)
+    source = ZillowSource(runs, now=lambda: AT, lookup_http=lookups)
+    assert source.place(replace(CHICAGO, locations={})) == {"region_id": 17426, "region_type": 6}
+    assert source.place(replace(LINCOLN_PARK, locations={})) == {"region_id": 269590, "region_type": 8}
+    assert runs.requested == []
+    assert lookups.requested[0].endswith("?q=Chicago%2C%20IL")
+
+
+def test_place_refuses_an_area_zillow_does_not_know():
+    source = ZillowSource(FakeHttp(json.dumps({"results": []})), now=lambda: AT)
+    with pytest.raises(CantPlace, match="Zillow doesn't know Chicago, IL"):
+        source.place(replace(CHICAGO, locations={}))
+
+
+def test_place_raises_a_scrape_error_when_the_lookup_is_down():
+    source = ZillowSource(FakeHttp(HttpResponse(500, "")), now=lambda: AT)
+    with pytest.raises(ScrapeError, match="place lookup isn't answering"):
+        source.place(replace(CHICAGO, locations={}))
