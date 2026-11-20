@@ -17,7 +17,7 @@ from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, summarize
 from apartment_hunter.models import Search
 from apartment_hunter.runner import RunOutcome, SearchRunner
 from apartment_hunter.scheduler import Scheduler
-from apartment_hunter.sources import SOURCE_NAMES, CantPlace, ScrapeError, Source, filters_used
+from apartment_hunter.sources import PLACE_NOTE, SOURCE_NAMES, CantPlace, ScrapeError, Source, filters_used
 from apartment_hunter.storage import DuplicateName, Store
 from apartment_hunter.text import join_and
 
@@ -300,13 +300,20 @@ class SearchService:
             raise SearchError(f"I can't search {area.display} on any site: {' '.join(left_out)}")
         return replace(area, locations=locations), placed, left_out
 
-    def _filter_notes(self, criteria: Criteria, sources: tuple[str, ...]) -> list[str]:
-        """A note for each Source that can't apply some of the filters these Criteria set."""
+    def _source_notes(self, criteria: Criteria, sources: tuple[str, ...]) -> list[str]:
+        """What each Source searches that differs from what was asked: a broader area than the one
+        picked, a home type it can't match exactly, and the filters it can't apply."""
         notes = []
         for key in sources:
             if key not in self.sources:
                 continue
-            missing = [f.value for f in filters_used(criteria) if f not in self.sources[key].filters]
+            source = self.sources[key]
+            place_note = criteria.area.locations.get(key, {}).get(PLACE_NOTE)
+            if place_note:
+                notes.append(str(place_note))
+            if criteria.home_type in source.home_type_notes:
+                notes.append(source.home_type_notes[criteria.home_type])
+            missing = [f.value for f in filters_used(criteria) if f not in source.filters]
             if missing:
                 notes.append(f"{SOURCE_NAMES.get(key, key)} can't filter by {' or '.join(missing)}, "
                              "so you'll see all of its matches.")
@@ -384,7 +391,7 @@ class SearchService:
                 f'This server already has a search called "{name}". Pick another name with name:.'
             ) from error
         self.scheduler.add(search.id, first_delay=self.interval_minutes * 60)
-        notes = (*left_out, *self._filter_notes(criteria, sources))
+        notes = (*left_out, *self._source_notes(criteria, sources))
         return search, self._run_now(search.id, notes)
 
     def find(self, server_id: int, name: str) -> Search:
@@ -430,7 +437,7 @@ class SearchService:
             self.store.update_search(edited, reseed=reseed)
         if not reseed:
             return edited, None
-        return edited, self._run_now(search.id, (*left_out, *self._filter_notes(criteria, sources)))
+        return edited, self._run_now(search.id, (*left_out, *self._source_notes(criteria, sources)))
 
     def pause(self, server_id: int, name: str) -> Search:
         """Stop a Search's scheduled Runs until it's resumed."""
@@ -463,7 +470,7 @@ class SearchService:
                     f'You can check "{search.name}" again in {minutes} minute{"" if minutes == 1 else "s"}.'
                 )
         self._last_check[search.id] = now
-        return search, self._run_now(search.id, tuple(self._filter_notes(search.criteria, search.sources)))
+        return search, self._run_now(search.id, tuple(self._source_notes(search.criteria, search.sources)))
 
     def server_removed(self, server_id: int) -> int:
         """The bot left a server: delete its Searches. Returns how many there were."""

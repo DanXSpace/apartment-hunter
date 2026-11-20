@@ -718,3 +718,24 @@ def test_a_search_in_germany_reads_kleinanzeigen_with_beds_as_rooms_and_prices_i
         "https://www.kleinanzeigen.de/s-wohnung-mieten/berlin/sortierung:neuste/anzeige:angebote/preis::1500/"
         "c203l3331+wohnung_mieten.zimmer_d:3%2C")
     assert env.notifiers[10].listings == []
+
+
+def test_a_source_that_searches_a_broader_area_says_so_in_every_reply(env, uk):
+    uk.place_note = "Rightmove doesn't know Camden, so it searches North London."
+    _, pending = env.service.create(1, 10, 99, NewSearch(CAMDEN.display, name="Flat"), can_post=True)
+    assert pending.notes == ("Rightmove doesn't know Camden, so it searches North London.",)
+    _, pending = env.service.edit(1, "Flat", SearchChanges(max_price=2000))
+    assert pending.notes == ("Rightmove doesn't know Camden, so it searches North London.",)
+    _, pending = env.service.check(1, "Flat")
+    assert pending.notes == ("Rightmove doesn't know Camden, so it searches North London.",)
+    assert uk.placed == [CAMDEN.display]
+
+
+def test_a_home_type_a_source_cannot_match_exactly_gets_its_note(env, uk):
+    uk.home_type_notes = {
+        HomeType.TOWNHOME: "Rightmove can't tell townhomes from houses, so you'll see all houses."}
+    _, pending = env.service.create(1, 10, 99, NewSearch(CAMDEN.display, home_type=HomeType.TOWNHOME,
+                                                         name="Flat"), can_post=True)
+    assert pending.notes == ("Rightmove can't tell townhomes from houses, so you'll see all houses.",)
+    _, pending = env.service.edit(1, "Flat", SearchChanges(home_type=HomeType.HOUSE))
+    assert pending.notes == ()

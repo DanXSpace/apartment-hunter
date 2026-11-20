@@ -13,7 +13,14 @@ from scrapling.parser import Selector
 
 from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, SourceLocation
 from apartment_hunter.models import Listing
-from apartment_hunter.sources import BlockedError, CantPlace, Filter, ScrapeError, SourcePage
+from apartment_hunter.sources import (
+    NO_HOME_TYPE_NOTES,
+    BlockedError,
+    CantPlace,
+    Filter,
+    ScrapeError,
+    SourcePage,
+)
 from apartment_hunter.sources.http import HttpClient, raise_for_status
 
 _SITE = "https://www.kleinanzeigen.de"
@@ -179,6 +186,7 @@ class KleinanzeigenSource:
 
     key = "kleinanzeigen"
     filters = frozenset({Filter.PRICE, Filter.BEDS, Filter.HOME_TYPE, Filter.PETS})
+    home_type_notes = NO_HOME_TYPE_NOTES
 
     def __init__(
         self,

@@ -13,7 +13,14 @@ from scrapling.parser import Selector
 from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, SourceLocation
 from apartment_hunter.geo import distance_miles
 from apartment_hunter.models import Listing
-from apartment_hunter.sources import ALL_FILTERS, BlockedError, CantPlace, ScrapeError, SourcePage
+from apartment_hunter.sources import (
+    ALL_FILTERS,
+    NO_HOME_TYPE_NOTES,
+    BlockedError,
+    CantPlace,
+    ScrapeError,
+    SourcePage,
+)
 from apartment_hunter.sources.http import HttpClient, raise_for_status
 
 SEARCH_URL = "https://www.zillow.com/homes/for_rent/"
@@ -258,6 +265,7 @@ class ZillowSource:
 
     key = "zillow"
     filters = ALL_FILTERS
+    home_type_notes = NO_HOME_TYPE_NOTES
 
     def __init__(
         self,

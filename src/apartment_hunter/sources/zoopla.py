@@ -11,7 +11,14 @@ from urllib.parse import quote, urlencode
 
 from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, SourceLocation
 from apartment_hunter.models import Listing
-from apartment_hunter.sources import ALL_FILTERS, BlockedError, CantPlace, ScrapeError, SourcePage
+from apartment_hunter.sources import (
+    ALL_FILTERS,
+    NO_HOME_TYPE_NOTES,
+    BlockedError,
+    CantPlace,
+    ScrapeError,
+    SourcePage,
+)
 from apartment_hunter.sources.http import HttpClient, raise_for_status
 from apartment_hunter.text import plain_number
 
@@ -165,6 +172,7 @@ class ZooplaSource:
 
     key = "zoopla"
     filters = ALL_FILTERS
+    home_type_notes = NO_HOME_TYPE_NOTES
 
     def __init__(
         self,

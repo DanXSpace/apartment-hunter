@@ -16,7 +16,14 @@ from scrapling.parser import Selector
 
 from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, SourceLocation
 from apartment_hunter.models import Listing
-from apartment_hunter.sources import ALL_FILTERS, BlockedError, Filter, ScrapeError, SourcePage
+from apartment_hunter.sources import (
+    ALL_FILTERS,
+    NO_HOME_TYPE_NOTES,
+    BlockedError,
+    Filter,
+    ScrapeError,
+    SourcePage,
+)
 from apartment_hunter.sources.http import HttpClient, raise_for_status
 
 # Half the side of the square drawn around an Area that has no bounding box, in kilometres.
@@ -218,6 +225,7 @@ class IdealistaSource:
     ) -> None:
         self.key = site.key
         self.filters = site.filters
+        self.home_type_notes = NO_HOME_TYPE_NOTES
         self._site = site
         self._http = http
         self._now = now

@@ -1,9 +1,16 @@
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from types import MappingProxyType
 from typing import Protocol
 
 from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, SourceLocation
 from apartment_hunter.models import Listing
+
+# The key of a source location's note, when a Source searches a broader area than the one picked
+# ("Bien'ici doesn't know Montmartre, so it searches Paris 18e."). Replies about the Search show it.
+PLACE_NOTE = "note"
+NO_HOME_TYPE_NOTES: Mapping[HomeType, str] = MappingProxyType({})
 
 SOURCE_NAMES = {
     "zillow": "Zillow",
@@ -67,15 +74,19 @@ class SourcePage:
 
 class Source(Protocol):
     """A listing site. `key` names it in SOURCE_NAMES and in the countries table; `filters` are the
-    Criteria its site can filter by (the rest are passed over and named in replies)."""
+    Criteria its site can filter by (the rest are passed over and named in replies).
+    `home_type_notes` say what it searches for a home type it can't match exactly ("Zoopla can't tell
+    townhomes from houses, so you'll see all houses."); replies about the Search show them."""
 
     key: str
     filters: frozenset[Filter]
+    home_type_notes: Mapping[HomeType, str]
 
     def place(self, area: Area) -> SourceLocation:
         """What this Source needs to search `area`, worked out once when a Search is created or its
-        Area changes and saved with it. Raises CantPlace when the site can't search there, or
-        ScrapeError when its place lookup didn't answer."""
+        Area changes and saved with it. A Source searches the Area picked; when it searches a broader
+        one, the location says so under PLACE_NOTE. Raises CantPlace when the site can't search
+        there, or ScrapeError when its place lookup didn't answer."""
         ...
 
     def fetch(self, criteria: Criteria, page: int) -> SourcePage:

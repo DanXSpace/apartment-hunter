@@ -13,7 +13,7 @@ from scrapling.parser import Selector
 from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, SourceLocation
 from apartment_hunter.geo import distance_miles
 from apartment_hunter.models import Listing
-from apartment_hunter.sources import ALL_FILTERS, ScrapeError, SourcePage
+from apartment_hunter.sources import ALL_FILTERS, NO_HOME_TYPE_NOTES, ScrapeError, SourcePage
 from apartment_hunter.sources.http import HttpClient, raise_for_status
 from apartment_hunter.text import plain_number
 
@@ -106,6 +106,7 @@ class CraigslistSource:
 
     key = "craigslist"
     filters = ALL_FILTERS
+    home_type_notes = NO_HOME_TYPE_NOTES
 
     def __init__(
         self,
