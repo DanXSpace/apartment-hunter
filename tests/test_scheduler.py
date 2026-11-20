@@ -1,44 +1,28 @@
 import pytest
 
-from apartment_hunter.config import Search
 from apartment_hunter.scheduler import Scheduler, next_delay_seconds
-
-A = Search("A", "https://www.apartments.com/a/", 15, "https://discord/webhook")
-B = Search("B", "https://www.apartments.com/b/", 30, "https://discord/webhook")
-
-
-class FakeClock:
-    def __init__(self):
-        self.now = 1000.0
-
-    def __call__(self):
-        return self.now
-
-    def advance(self, minutes):
-        self.now += minutes * 60
+from fakes import MINUTE, FakeClock
 
 
 @pytest.fixture
 def env():
     clock, ran = FakeClock(), []
-    scheduler = Scheduler(lambda s: ran.append(s.name), [A, B], clock=clock,
-                          next_delay=lambda minutes: minutes * 60)
+    scheduler = Scheduler(ran.append, interval_minutes=15, clock=clock, next_delay=lambda m: m * 60)
+    scheduler.add("A")
+    scheduler.add("B")
     scheduler.start()
     return scheduler, clock, ran
 
 
-def test_every_search_runs_once_at_start_then_on_its_interval(env):
+def test_every_search_runs_once_at_start_then_on_the_interval(env):
     scheduler, clock, ran = env
     assert scheduler.run_pending() == 2
     assert ran == ["A", "B"]
-    clock.advance(14)
+    clock.advance(14 * MINUTE)
     assert scheduler.run_pending() == 0
-    clock.advance(1)
+    clock.advance(MINUTE)
     scheduler.run_pending()
-    assert ran == ["A", "B", "A"]
-    clock.advance(15)
-    scheduler.run_pending()
-    assert ran == ["A", "B", "A", "A", "B"]
+    assert ran == ["A", "B", "A", "B"]
 
 
 def test_default_jitter_is_within_twenty_percent_of_the_interval():
@@ -50,11 +34,13 @@ def test_default_jitter_is_within_twenty_percent_of_the_interval():
 def test_stop_halts_further_runs_after_the_current_one():
     ran = []
 
-    def run_then_stop(search):
-        ran.append(search.name)
+    def run_then_stop(search_id):
+        ran.append(search_id)
         scheduler.stop()
 
-    scheduler = Scheduler(run_then_stop, [A, B], clock=FakeClock())
+    scheduler = Scheduler(run_then_stop, clock=FakeClock())
+    scheduler.add("A")
+    scheduler.add("B")
     scheduler.start()
     assert scheduler.run_pending() == 1
     assert ran == ["A"]
@@ -69,7 +55,7 @@ def test_paused_search_is_skipped_until_resumed(env):
     scheduler.pause("A")
     assert scheduler.is_paused("A")
     scheduler.run_pending()
-    clock.advance(30)
+    clock.advance(15 * MINUTE)
     scheduler.run_pending()
     assert ran == ["B", "B"]
     scheduler.resume("A")
@@ -80,19 +66,19 @@ def test_paused_search_is_skipped_until_resumed(env):
 def test_run_now_queues_a_search_ahead_of_its_interval(env):
     scheduler, clock, ran = env
     scheduler.run_pending()
-    clock.advance(5)
+    clock.advance(5 * MINUTE)
     scheduler.run_now("B")
     scheduler.run_now("B")
     assert ran == ["A", "B"]  # queued, not run inline
     assert scheduler.run_pending() == 1
     assert ran == ["A", "B", "B"]
     ran.clear()
-    clock.advance(29)  # t=34: B's interval restarted at t=5, so it isn't due until t=35
+    clock.advance(14 * MINUTE)  # t=19: B's interval restarted at t=5, so it isn't due until t=20
     scheduler.run_pending()
-    assert "B" not in ran
-    clock.advance(1)
+    assert ran == ["A"]
+    clock.advance(MINUTE)
     scheduler.run_pending()
-    assert ran[-1] == "B"
+    assert ran == ["A", "B"]
 
 
 def test_run_now_waits_while_stopped(env):
@@ -109,15 +95,52 @@ def test_run_now_waits_while_stopped(env):
 def test_one_bad_run_does_not_stop_the_scheduler():
     clock, ran = FakeClock(), []
 
-    def flaky(search):
-        if search.name == "A":
+    def flaky(search_id):
+        if search_id == "A":
             raise RuntimeError("boom")
-        ran.append(search.name)
+        ran.append(search_id)
 
-    scheduler = Scheduler(flaky, [A, B], clock=clock, next_delay=lambda minutes: minutes * 60)
+    scheduler = Scheduler(flaky, interval_minutes=15, clock=clock, next_delay=lambda m: m * 60)
+    scheduler.add("A")
+    scheduler.add("B")
     scheduler.start()
     assert scheduler.run_pending() == 2
     assert ran == ["B"]
-    clock.advance(30)
+    clock.advance(15 * MINUTE)
     scheduler.run_pending()
     assert ran == ["B", "B"]
+
+
+def test_added_search_runs_after_its_first_delay_then_on_the_interval():
+    clock, ran = FakeClock(), []
+    s = Scheduler(ran.append, interval_minutes=15, clock=clock, next_delay=lambda m: m * 60)
+    s.start()
+    s.add("a", first_delay=300)
+    assert s.run_pending() == 0
+    clock.advance(5 * MINUTE)
+    assert s.run_pending() == 1
+    clock.advance(15 * MINUTE)
+    s.run_pending()
+    assert ran == ["a", "a"]
+
+
+def test_removed_search_never_runs_even_if_queued():
+    clock, ran = FakeClock(), []
+    s = Scheduler(ran.append, clock=clock, next_delay=lambda m: m * 60)
+    s.start()
+    s.add("a", first_delay=900)
+    s.run_now("a")
+    s.remove("a")
+    assert s.run_pending() == 0
+    with pytest.raises(KeyError):
+        s.run_now("a")
+
+
+def test_added_paused_search_waits_for_resume():
+    clock, ran = FakeClock(), []
+    s = Scheduler(ran.append, clock=clock, next_delay=lambda m: m * 60)
+    s.start()
+    s.add("a", paused=True)
+    assert s.run_pending() == 0
+    s.resume("a")
+    assert s.run_pending() == 1

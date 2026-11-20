@@ -19,3 +19,13 @@ Review rules (judgement calls) live in `CODING_STANDARDS.md`; lint and types run
 ### TDD and review
 
 A spec's **Testing Decisions** section is the pre-agreed seam list for `/tdd`. To review uncommitted work, run `git add -N` on new files first so `git diff HEAD` includes them.
+
+## Environment
+
+### Dependencies
+
+Change dependencies with `uvx uv@0.12.19 add …` / `remove …`, the uv the Dockerfile pins: it keeps `uv.lock` at revision 3, which the image's `uv sync --frozen` reads. Other uv versions rewrite the whole file.
+
+### Cloud sessions
+
+A cloud session reaches PyPI and GitHub, not Zillow, Craigslist or Discord: refreshing fixtures, running `scripts/feasibility_check.py` and running the bot happen on the owner's computer or in a GitHub Actions job. Reach GitHub through `gh api` (REST) or the built-in GitHub tools; the cloud's GitHub proxy refuses `gh issue` and `gh pr` (GraphQL), tag pushes and branch deletions.

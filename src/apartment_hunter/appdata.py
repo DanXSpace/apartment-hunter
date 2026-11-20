@@ -11,9 +11,6 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import IO
 
-import platformdirs
-
-APP_NAME = "apartment-hunter"
 LOG_FORMAT = "%(asctime)s %(levelname)-7s %(name)s: %(message)s"
 LOCK_FILE = "apartment-hunter.lock"
 
@@ -24,38 +21,17 @@ class AlreadyRunning(Exception):
 
 @dataclass(frozen=True)
 class DataDir:
-    """A directory of app state: config, database, browser profile, logs, lock and port file.
-
-    The desktop app uses the per-user app-data location (`DataDir.app_data()`). The CLI uses
-    the directory holding its database (`./data` by default), unless given `--app-data`.
-    """
+    """A directory of bot state: the database, logs and the single-instance lock."""
 
     root: Path
-
-    @classmethod
-    def app_data(cls) -> DataDir:
-        """The standard per-user app-data directory for this OS."""
-        return cls(Path(platformdirs.user_data_dir(APP_NAME, appauthor=False)))
-
-    @property
-    def config(self) -> Path:
-        return self.root / "config.toml"
 
     @property
     def database(self) -> Path:
         return self.root / "apartment_hunter.db"
 
     @property
-    def browser_profile(self) -> Path:
-        return self.root / "browser-profile"
-
-    @property
     def log_file(self) -> Path:
         return self.root / "logs" / "apartment-hunter.log"
-
-    @property
-    def port_file(self) -> Path:
-        return self.root / "port"
 
     @property
     def lock_file(self) -> Path:
