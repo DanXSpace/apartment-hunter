@@ -192,12 +192,14 @@ def test_place_finds_a_postcode_by_its_code(fixture_html):
     assert lookups.requested == ["https://res.bienici.com/suggest.json?q=75018"]
 
 
-def test_a_neighbourhood_bienici_does_not_know_falls_back_to_the_smallest_zone_of_its_city_around_it(
+def test_a_neighbourhood_bienici_does_not_know_falls_back_to_the_smallest_zone_of_its_city_and_says_so(
         fixture_html):
     # Bien'ici's lookup only offers Montmartin and the like for "Montmartre"; Paris 18e holds it.
     bienici, lookups, _ = placer({"Montmartre": fixture_html("bienici/suggest_montmartre.json"),
                                   "Paris": fixture_html("bienici/suggest_paris.json")})
-    assert bienici.place(MONTMARTRE) == {"zone_ids": "-9531", "slug": "paris-18e-75018"}
+    assert bienici.place(MONTMARTRE) == {
+        "zone_ids": "-9531", "slug": "paris-18e-75018",
+        "note": "Bien'ici doesn't know Montmartre, so it searches Paris 18e."}
     assert lookups.requested == ["https://res.bienici.com/suggest.json?q=Montmartre",
                                  "https://res.bienici.com/suggest.json?q=Paris"]
 

@@ -15,6 +15,7 @@ from apartment_hunter.criteria import Area, Criteria, HomeType, SourceLocation
 from apartment_hunter.models import Listing
 from apartment_hunter.sources import (
     NO_HOME_TYPE_NOTES,
+    PLACE_NOTE,
     BlockedError,
     CantPlace,
     Filter,
@@ -217,14 +218,16 @@ class BieniciSource:
     def place(self, area: Area) -> SourceLocation:
         """The zone named like the Area's own name (or holding its postcode). Bien'ici's lookup knows
         communes and arrondissements but not neighbourhoods, so when that fails the Area goes on the
-        smallest zone of its city that holds it: Montmartre is searched as Paris 18e."""
+        smallest zone of its city that holds it: Montmartre is searched as Paris 18e, and the location
+        notes that."""
         parts = area.display.split(", ")
         zone = matching_zone(self._suggest(parts[0]), area, parts[0])
-        if zone is None and len(parts) > 2:
-            zone = smallest_zone_around(self._suggest(parts[1]), area)
+        if zone is not None:
+            return zone.location
+        zone = smallest_zone_around(self._suggest(parts[1]), area) if len(parts) > 2 else None
         if zone is None:
             raise CantPlace(f"Bien'ici doesn't know {area.display}.")
-        return zone.location
+        return {**zone.location, PLACE_NOTE: f"Bien'ici doesn't know {parts[0]}, so it searches {zone.name}."}
 
     def _suggest(self, text: str) -> list[Zone]:
         try:
