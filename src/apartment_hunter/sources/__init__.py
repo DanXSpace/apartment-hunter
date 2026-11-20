@@ -6,6 +6,7 @@ from apartment_hunter.criteria import Area, Criteria, HomeType, Pets, SourceLoca
 from apartment_hunter.models import Listing
 
 SOURCE_NAMES = {"zillow": "Zillow", "craigslist": "Craigslist", "rightmove": "Rightmove",
+                "idealista_it": "Idealista Italy", "idealista_pt": "Idealista Portugal",
                 "bienici": "Bien'ici"}
 
 
