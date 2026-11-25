@@ -1,7 +1,7 @@
 [project]
 name = "apartment-hunter"
 version = "0.2.0"
-description = "A Discord bot that posts new rental listings from Zillow and Craigslist"
+description = "A Discord bot that posts new rentals and price drops from 9 listing sites across the US, UK and Europe"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"

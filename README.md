@@ -21,7 +21,21 @@ A Discord bot that watches rental sites in the US, the UK, Germany, France, Spai
 - **Doesn't lose alerts.** A listing only counts as seen once Discord accepts its alert, so a Discord outage just means the alert goes out on the next check.
 - **Polite by default.** One request at a time, a few seconds between requests to the same site, and each search is checked about every 15 minutes.
 
-> **Personal use only.** This bot reads search results from Zillow, Craigslist, Rightmove, Zoopla, Kleinanzeigen, Bien'ici, Fotocasa, Idealista (idealista.it and idealista.pt) and Pararius automatically. The terms of use of these sites generally forbid automated access. Check them before you run it, keep the polite defaults, and use it for your own apartment search and your friends'. Don't promote it publicly. You are responsible for how you use it.
+[![CI](https://github.com/DanXSpace/apartment-hunter/actions/workflows/ci.yml/badge.svg)](https://github.com/DanXSpace/apartment-hunter/actions/workflows/ci.yml)
+
+## Engineering highlights
+
+- **9 site adapters behind one interface.** Each Source turns a search's criteria into HTTP requests and parses the results into a common listing model. Countries, currencies and their sites live in one table, so adding a site or country is a new Source plus a row.
+- **Layered design.** The Discord bot is a thin layer over a search service that owns the rules (limits, per-server isolation, seeding, site selection), backed by SQLite. A jittered scheduler runs one check at a time.
+- **At-least-once alerting.** A listing is marked seen only after Discord accepts its alert, so outages delay alerts instead of dropping them. A search's first run quietly records what's already listed, so you never get a flood of alerts on day one.
+- **Failure detection.** Per-site, per-search failure streaks raise a warning in the channel after 3 misses and announce the recovery. The owner gets a direct message when a site fails for every search.
+- **354 offline tests.** Network access is disabled in the test suite (pytest-socket); Sources are tested against saved pages. CI runs ruff, mypy and pytest on Linux, macOS and Windows, and checks that the Docker image boots.
+- **Measured before shipped.** Each site was kept only after a 4-hour feasibility run (16 rounds) from the target host; sites that failed were dropped and recorded below.
+- **Three architectures, each simpler than the last.** v0.1 used Kafka, v0.2 drove a headless browser, and the current version makes plain HTTP requests, small enough for a spare computer or a Raspberry Pi.
+
+**Stack:** Python 3.12, discord.py, curl_cffi, SQLite, Docker, uv, ruff, mypy, pytest, GitHub Actions.
+
+> **Responsible use.** This is a personal project built for my own apartment search. The listing sites' terms of use generally restrict automated access, so the bot is rate-limited by default (one request at a time, a few seconds apart, each search checked about every 15 minutes) and is meant for small-scale personal use. If you run it, check those terms first; you're responsible for how you use it.
 
 ## For people using it
 
